@@ -95,8 +95,12 @@ class PatientInfoCard extends StatelessWidget {
               Expanded(
                 child: _infoItem(
                   'SANGRE',
-                  patient.bloodType ?? '-',
-                  valueColor: AppColors.danger,
+                  (patient.bloodType != null && patient.bloodType!.trim().isNotEmpty)
+                      ? patient.bloodType!
+                      : '-',
+                  valueColor: (patient.bloodType != null && patient.bloodType!.trim().isNotEmpty)
+                      ? AppColors.danger
+                      : AppColors.textSecondary,
                 ),
               ),
               Expanded(

@@ -3,7 +3,8 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/prescription.dart';
 import '../../providers/clinical_providers.dart';
-import '../../services/mock_api_service.dart';
+import '../../providers/patient_provider.dart';
+import '../../services/supabase_service.dart';
 import '../../services/pdf_export_service.dart';
 import '../../widgets/common/breadcrumb.dart';
 
@@ -37,8 +38,14 @@ class _PrescriptionBuilderScreenState extends State<PrescriptionBuilderScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<PrescriptionProvider>().loadPrescription();
+      final patient = context.read<PatientProvider>().selectedPatient;
+      context.read<PrescriptionProvider>().loadPrescription(patientId: patient?.id);
     });
+  }
+
+  String _formatCurrentDate(DateTime date) {
+    const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    return '${date.day} ${months[date.month - 1]} ${date.year}';
   }
 
   @override
@@ -59,6 +66,15 @@ class _PrescriptionBuilderScreenState extends State<PrescriptionBuilderScreen> {
           return const Center(child: CircularProgressIndicator(color: AppColors.primaryBlue));
         }
 
+        final curPatient = context.watch<PatientProvider>().selectedPatient;
+        final patientName = curPatient?.fullName ?? prescription?.patientName ?? "Paciente";
+        final patientCode = curPatient?.patientCode ?? prescription?.patientCode ?? "-";
+        final patientAge = curPatient?.age ?? prescription?.patientAge;
+        final alerts = context.watch<PatientProvider>().allergyAlerts;
+        final allergiesText = alerts.isNotEmpty
+            ? alerts.map((a) => a.allergen).join(', ')
+            : 'Sin Alergias Conocidas';
+
         return SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
@@ -68,7 +84,7 @@ class _PrescriptionBuilderScreenState extends State<PrescriptionBuilderScreen> {
               Breadcrumb(
                 items: [
                   BreadcrumbItem(label: 'Pacientes', onTap: widget.onBack),
-                  BreadcrumbItem(label: 'Ana García', onTap: widget.onBack),
+                  BreadcrumbItem(label: patientName, onTap: widget.onBack),
                   const BreadcrumbItem(label: 'Nueva Receta'),
                 ],
               ),
@@ -118,7 +134,7 @@ class _PrescriptionBuilderScreenState extends State<PrescriptionBuilderScreen> {
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
-                                    'Paciente: ${prescription?.patientName ?? "Ana García López"}',
+                                    'Paciente: $patientName',
                                     style: const TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w700,
@@ -133,7 +149,7 @@ class _PrescriptionBuilderScreenState extends State<PrescriptionBuilderScreen> {
                                       border: Border.all(color: AppColors.border),
                                     ),
                                     child: Text(
-                                      'ID: ${prescription?.patientCode ?? "PT-8472"}',
+                                      'ID: $patientCode',
                                       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
                                     ),
                                   ),
@@ -142,14 +158,14 @@ class _PrescriptionBuilderScreenState extends State<PrescriptionBuilderScreen> {
                               const SizedBox(height: 16),
                               Row(
                                 children: [
-                                  _infoSnippet('Edad', '${prescription?.patientAge ?? 34} años'),
+                                  _infoSnippet('Edad', patientAge != null ? '$patientAge años' : '-'),
                                   const SizedBox(width: 32),
-                                  _infoSnippet('Peso', '${prescription?.patientWeightKg?.toInt() ?? 62} kg'),
+                                  _infoSnippet('Peso', prescription?.patientWeightKg != null ? '${prescription!.patientWeightKg!.toInt()} kg' : '-'),
                                   const SizedBox(width: 32),
                                   _infoSnippet(
                                     'Alergias',
-                                    prescription?.patientAllergies ?? 'Penicilina',
-                                    valueColor: AppColors.danger,
+                                    allergiesText,
+                                    valueColor: alerts.isNotEmpty ? AppColors.danger : AppColors.success,
                                   ),
                                 ],
                               ),
@@ -188,7 +204,7 @@ class _PrescriptionBuilderScreenState extends State<PrescriptionBuilderScreen> {
                                   if (textEditingValue.text.isEmpty) {
                                     return const Iterable<String>.empty();
                                   }
-                                  return await MockApiService().searchDrugs(textEditingValue.text);
+                                  return await SupabaseService().searchDrugs(textEditingValue.text);
                                 },
                                 onSelected: (String selection) {
                                   _drugController.text = selection;
@@ -457,16 +473,19 @@ class _PrescriptionBuilderScreenState extends State<PrescriptionBuilderScreen> {
                                     children: [
                                       const Text('Paciente:', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
                                       Text(
-                                        prescription?.patientName ?? 'Ana García López',
+                                        patientName,
                                         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
                                       ),
                                     ],
                                   ),
-                                  const Column(
+                                  Column(
                                     crossAxisAlignment: CrossAxisAlignment.end,
                                     children: [
-                                      Text('Fecha:', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                                      Text('24 Oct 2023', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                                      const Text('Fecha:', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                                      Text(
+                                        _formatCurrentDate(prescription?.date ?? DateTime.now()),
+                                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                                      ),
                                     ],
                                   ),
                                 ],
@@ -540,18 +559,54 @@ class _PrescriptionBuilderScreenState extends State<PrescriptionBuilderScreen> {
                           height: 48,
                           child: ElevatedButton.icon(
                             onPressed: () async {
-                              if (prescription == null) return;
+                              if (provider.items.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Añada al menos un medicamento a la receta antes de generar o imprimir.'),
+                                    backgroundColor: AppColors.warning,
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                                return;
+                              }
+
+                              final pat = context.read<PatientProvider>().selectedPatient;
+                              if (pat != null && pat.id != null) {
+                                await provider.savePrescription(pat.id!);
+                                if (!context.mounted) return;
+                                await context.read<PatientProvider>().loadPatientDetail();
+                              }
+
                               try {
+                                final presToExport = (prescription ??
+                                        Prescription(
+                                          patientId: pat?.id ?? 0,
+                                          patientName: pat?.fullName ?? 'Paciente',
+                                          patientCode: pat?.patientCode ?? 'PT-000',
+                                          date: DateTime.now(),
+                                          clinicName: 'Clínica Sanitas Central',
+                                          clinicAddress: 'Av. Principal 123, Ciudad • Tel: 555-0192',
+                                          doctorName: 'Dr. Carlos Mendoza',
+                                          items: provider.items,
+                                        ))
+                                    .copyWith(
+                                  patientName: patientName,
+                                  patientCode: patientCode,
+                                  items: provider.items,
+                                );
+
+                                if (!context.mounted) return;
                                 await PdfExportService.exportPrescriptionPdf(
                                   context: context,
-                                  prescription: prescription,
+                                  prescription: presToExport,
                                   items: provider.items,
                                 );
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
-                                      content: Text('Receta médica generada en PDF con éxito.'),
+                                      content: Text('Receta médica guardada y generada en PDF con éxito.'),
                                       backgroundColor: AppColors.success,
+                                      behavior: SnackBarBehavior.floating,
                                     ),
                                   );
                                 }
@@ -561,6 +616,7 @@ class _PrescriptionBuilderScreenState extends State<PrescriptionBuilderScreen> {
                                     SnackBar(
                                       content: Text('Error al generar PDF: $e'),
                                       backgroundColor: AppColors.danger,
+                                      behavior: SnackBarBehavior.floating,
                                     ),
                                   );
                                 }

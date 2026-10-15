@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import '../models/appointment.dart';
-import '../services/mock_api_service.dart';
+import '../services/supabase_service.dart';
 
 class DashboardProvider extends ChangeNotifier {
-  final MockApiService _api = MockApiService();
+  final SupabaseService _api = SupabaseService();
 
   bool _isLoading = false;
   int _appointmentsToday = 0;
@@ -71,8 +71,8 @@ class DashboardProvider extends ChangeNotifier {
     await refreshSilently();
   }
 
-  Future<void> recordIncome(double amount) async {
-    await _api.addIncome(amount);
+  Future<void> recordIncome(double amount, {int? patientId, int? appointmentId, String? concept}) async {
+    await _api.addIncome(amount, patientId: patientId, appointmentId: appointmentId, concept: concept);
     await refreshSilently();
   }
 

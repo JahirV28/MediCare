@@ -36,6 +36,7 @@ class _PatientRegistrationScreenState extends State<PatientRegistrationScreen> {
   DateTime? _birthDate;
   String? _birthDateError;
   String? _selectedGender;
+  String? _selectedBloodType;
   String? _selectedRelationship;
   bool _isSaving = false;
 
@@ -289,13 +290,70 @@ class _PatientRegistrationScreenState extends State<PatientRegistrationScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  // Fila 3: 6. Dirección de Domicilio (Obligatorio)
-                  CustomTextField(
-                    label: 'DIRECCIÓN DE DOMICILIO / RESIDENCIA',
-                    hintText: 'Ej. Colonia Los Robles, Casa 45, Managua, Nicaragua',
-                    controller: _addressController,
-                    isRequired: true,
-                    validator: NicaraguaValidators.validateAddress,
+                  // Fila 3: Dirección de Domicilio y Tipo de Sangre (Opcional)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: CustomTextField(
+                          label: 'DIRECCIÓN DE DOMICILIO / RESIDENCIA',
+                          hintText: 'Ej. Colonia Los Robles, Casa 45, Managua, Nicaragua',
+                          controller: _addressController,
+                          isRequired: true,
+                          validator: NicaraguaValidators.validateAddress,
+                        ),
+                      ),
+                      const SizedBox(width: 20),
+                      Expanded(
+                        flex: 1,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'TIPO DE SANGRE (OPCIONAL)',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            DropdownButtonFormField<String?>(
+                              initialValue: _selectedBloodType,
+                              hint: const Text('Opcional...'),
+                              decoration: InputDecoration(
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: const BorderSide(color: AppColors.border),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: const BorderSide(color: AppColors.border),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                              ),
+                              items: const [
+                                DropdownMenuItem(value: null, child: Text('No especificado')),
+                                DropdownMenuItem(value: 'O+', child: Text('O+')),
+                                DropdownMenuItem(value: 'O-', child: Text('O-')),
+                                DropdownMenuItem(value: 'A+', child: Text('A+')),
+                                DropdownMenuItem(value: 'A-', child: Text('A-')),
+                                DropdownMenuItem(value: 'B+', child: Text('B+')),
+                                DropdownMenuItem(value: 'B-', child: Text('B-')),
+                                DropdownMenuItem(value: 'AB+', child: Text('AB+')),
+                                DropdownMenuItem(value: 'AB-', child: Text('AB-')),
+                              ],
+                              onChanged: (v) {
+                                setState(() {
+                                  _selectedBloodType = v;
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 32),
 
@@ -474,7 +532,7 @@ class _PatientRegistrationScreenState extends State<PatientRegistrationScreen> {
           gender: _selectedGender,
           phone: _phoneController.text.trim(),
           address: _addressController.text.trim(),
-          bloodType: 'O+',
+          bloodType: _selectedBloodType,
           isActive: true,
           lastVisit: DateTime.now(),
         );

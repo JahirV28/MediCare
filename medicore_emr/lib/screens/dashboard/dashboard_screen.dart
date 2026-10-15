@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/appointment.dart';
+import '../../models/patient.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../widgets/cards/stat_card.dart';
 import '../../widgets/tables/upcoming_patients_table.dart';
 import '../../widgets/charts/activity_chart.dart';
+import '../../widgets/common/patient_autocomplete_field.dart';
 
 class DashboardScreen extends StatefulWidget {
   final VoidCallback? onNavigateToPatients;
@@ -39,9 +42,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _showQuickAppointmentDialog(BuildContext context, DashboardProvider dashboard) {
-    final patientCtrl = TextEditingController();
+    Patient? selectedPatient;
     final serviceCtrl = TextEditingController(text: 'Consulta General');
     String selectedTime = '11:00 AM';
+    DateTime selectedDate = DateTime.now();
+    String? formError;
+
+    final quickServices = [
+      'Consulta General',
+      'Control Odontológico',
+      'Pediatría - Vacunación',
+      'Seguimiento Clínico',
+      'Urgencia',
+    ];
 
     showDialog(
       context: context,
@@ -51,43 +64,198 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             Icon(Icons.event_available, color: AppColors.primaryBlue, size: 22),
             SizedBox(width: 8),
-            Text('Agendar Cita para Hoy', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            Text('Agendar Cita', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
           ],
         ),
         content: SizedBox(
-          width: 380,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: patientCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Nombre del Paciente',
-                  hintText: 'Ej. Juan Pérez',
-                  prefixIcon: Icon(Icons.person_outline),
+          width: 440,
+          child: StatefulBuilder(
+            builder: (context, setDialogState) {
+              final isToday = selectedDate.year == DateTime.now().year &&
+                  selectedDate.month == DateTime.now().month &&
+                  selectedDate.day == DateTime.now().day;
+
+              return SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Selector interactivo de fecha
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: selectedDate,
+                          firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                          lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
+                          helpText: 'Seleccionar Fecha de la Cita',
+                          cancelText: 'Cancelar',
+                          confirmText: 'Seleccionar',
+                        );
+                        if (picked != null) {
+                          setDialogState(() {
+                            selectedDate = picked;
+                          });
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryBlue.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.primaryBlue.withValues(alpha: 0.2)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.calendar_today_outlined, size: 16, color: AppColors.primaryBlue),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Fecha: ${selectedDate.day.toString().padLeft(2, '0')}/${selectedDate.month.toString().padLeft(2, '0')}/${selectedDate.year}${isToday ? ' (Hoy)' : ''}',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primaryBlue),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryBlue,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.edit_calendar, size: 13, color: AppColors.white),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'Editar Fecha',
+                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.white),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Autocomplete de pacientes registrados
+                    PatientAutocompleteField(
+                      onPatientSelected: (patient) {
+                        setDialogState(() {
+                          selectedPatient = patient;
+                          formError = null;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Campo editable de Motivo / Servicio
+                    TextFormField(
+                      controller: serviceCtrl,
+                      onChanged: (_) {
+                        if (formError != null) setDialogState(() => formError = null);
+                      },
+                      decoration: InputDecoration(
+                        labelText: 'Motivo / Servicio *',
+                        hintText: 'Escriba o elija el motivo...',
+                        prefixIcon: const Icon(Icons.medical_services_outlined, size: 20, color: AppColors.primaryBlue),
+                        suffixIcon: serviceCtrl.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 16, color: AppColors.textSecondary),
+                                onPressed: () => setDialogState(() => serviceCtrl.clear()),
+                              )
+                            : null,
+                        filled: true,
+                        fillColor: AppColors.background,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.border)),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.border)),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.primaryBlue, width: 2)),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Sugerencias rápidas de servicio (hacer clic para rellenar/editar)
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: quickServices.map((svc) {
+                        final isSelected = serviceCtrl.text == svc;
+                        return InkWell(
+                          onTap: () {
+                            setDialogState(() {
+                              serviceCtrl.text = svc;
+                              formError = null;
+                            });
+                          },
+                          borderRadius: BorderRadius.circular(14),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: isSelected ? AppColors.primaryBlue : AppColors.primaryBlue.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: isSelected ? AppColors.primaryBlue : AppColors.primaryBlue.withValues(alpha: 0.2),
+                              ),
+                            ),
+                            child: Text(
+                              svc,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                color: isSelected ? AppColors.white : AppColors.primaryBlue,
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Selector de hora
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedTime,
+                      decoration: InputDecoration(
+                        labelText: 'Hora de la Cita',
+                        prefixIcon: const Icon(Icons.access_time, size: 20, color: AppColors.primaryBlue),
+                        filled: true,
+                        fillColor: AppColors.background,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.border)),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.border)),
+                      ),
+                      items: ['08:00 AM', '08:30 AM', '09:00 AM', '09:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM', '02:00 PM', '02:30 PM', '03:00 PM', '03:30 PM', '04:00 PM', '04:30 PM', '05:00 PM']
+                          .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                          .toList(),
+                      onChanged: (v) => setDialogState(() => selectedTime = v ?? selectedTime),
+                    ),
+
+                    if (formError != null) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.dangerLight,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.danger.withValues(alpha: 0.4)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.error_outline, size: 16, color: AppColors.danger),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                formError!,
+                                style: const TextStyle(fontSize: 12, color: AppColors.danger, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: serviceCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Motivo / Servicio',
-                  prefixIcon: Icon(Icons.medical_services_outlined),
-                ),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: selectedTime,
-                decoration: const InputDecoration(
-                  labelText: 'Hora',
-                  prefixIcon: Icon(Icons.access_time),
-                ),
-                items: ['08:00 AM', '09:00 AM', '10:00 AM', '11:00 AM', '02:00 PM', '03:30 PM', '04:00 PM', '05:00 PM']
-                    .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                    .toList(),
-                onChanged: (v) => selectedTime = v ?? selectedTime,
-              ),
-            ],
+              );
+            },
           ),
         ),
         actions: [
@@ -97,28 +265,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
-              if (patientCtrl.text.trim().isNotEmpty) {
-                final apt = Appointment(
-                  patientId: 5,
-                  doctorId: 1,
-                  serviceId: 1,
-                  appointmentDate: DateTime.now(),
-                  appointmentTime: selectedTime,
-                  status: 'En Espera',
-                  patientName: patientCtrl.text.trim(),
-                  serviceName: serviceCtrl.text.trim().isNotEmpty ? serviceCtrl.text.trim() : 'Consulta General',
+              if (selectedPatient == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Debe seleccionar un paciente registrado en la base de datos.'),
+                    backgroundColor: AppColors.warning,
+                    behavior: SnackBarBehavior.floating,
+                  ),
                 );
-                await dashboard.addAppointment(apt);
-                if (ctx.mounted) Navigator.pop(ctx);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Cita agendada para ${patientCtrl.text.trim()} hoy a las $selectedTime.'),
-                      backgroundColor: AppColors.success,
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                }
+                return;
+              }
+              if (serviceCtrl.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Por favor indique el motivo o servicio de la cita.'),
+                    backgroundColor: AppColors.warning,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+                return;
+              }
+
+              final pName = selectedPatient!.fullName;
+              final pId = selectedPatient!.id ?? 1;
+              final sName = serviceCtrl.text.trim();
+
+              final apt = Appointment(
+                patientId: pId,
+                doctorId: 1,
+                serviceId: 1,
+                appointmentDate: selectedDate,
+                appointmentTime: selectedTime,
+                status: 'En Espera',
+                patientName: pName,
+                serviceName: sName,
+              );
+              await dashboard.addAppointment(apt);
+              if (ctx.mounted) Navigator.pop(ctx);
+              if (context.mounted) {
+                final dateFmt = '${selectedDate.day.toString().padLeft(2, '0')}/${selectedDate.month.toString().padLeft(2, '0')}/${selectedDate.year}';
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Cita agendada para $pName el $dateFmt a las $selectedTime.'),
+                    backgroundColor: AppColors.success,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
               }
             },
             child: const Text('Agendar Cita'),
@@ -146,10 +338,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Column(
+                  Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      const Text(
                         'Panel Principal',
                         style: TextStyle(
                           fontSize: 26,
@@ -157,13 +349,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           color: AppColors.textPrimary,
                         ),
                       ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Bienvenido de vuelta, Dr. Smith. Aquí está el resumen de hoy.',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: AppColors.textSecondary,
-                        ),
+                      const SizedBox(height: 4),
+                      Consumer<AuthProvider>(
+                        builder: (context, auth, _) {
+                          final name = auth.currentUser?.fullName ?? 'Dr. Smith';
+                          return Text(
+                            'Bienvenido de vuelta, $name. Aquí está el resumen de hoy.',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: AppColors.textSecondary,
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -253,7 +450,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         }
                       },
                       onCollectPayment: (apt, amount) async {
-                        await dashboard.recordIncome(amount);
+                        await dashboard.recordIncome(
+                          amount,
+                          patientId: apt.patientId,
+                          appointmentId: apt.id,
+                          concept: 'Cobro de Servicio: ${apt.serviceName ?? "Consulta General"}',
+                        );
                         if (apt.id != null) {
                           await dashboard.updateAppointmentStatus(apt.id!, 'Atendido');
                         }

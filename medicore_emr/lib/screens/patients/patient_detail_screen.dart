@@ -275,9 +275,19 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> with SingleTi
                                           children: [
                                             const Icon(Icons.medical_information_outlined, size: 48, color: AppColors.primaryBlue),
                                             const SizedBox(height: 12),
-                                            const Text('Diagnóstico Principal: Lumbalgia Mecánica', style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                                            Text(
+                                              records.isNotEmpty
+                                                  ? 'Diagnóstico Principal: ${records.first.title}'
+                                                  : 'Sin Diagnósticos Registrados Aún',
+                                              style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                                            ),
                                             const SizedBox(height: 4),
-                                            const Text('CIE-10: M54.5 - Lumbago no especificado', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                                            Text(
+                                              records.isNotEmpty && records.first.description != null && records.first.description!.isNotEmpty
+                                                  ? records.first.description!
+                                                  : 'CIE-10: Pendiente de consulta médica',
+                                              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                                            ),
                                             const SizedBox(height: 16),
                                             ElevatedButton.icon(
                                               onPressed: widget.onNavigateToPrescription,

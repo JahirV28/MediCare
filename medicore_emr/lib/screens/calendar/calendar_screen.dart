@@ -3,22 +3,31 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/appointment.dart';
 import '../../providers/dashboard_provider.dart';
+import '../../services/supabase_service.dart';
+import '../../models/patient.dart';
 import '../../widgets/common/breadcrumb.dart';
+import '../../widgets/common/patient_autocomplete_field.dart';
 
 class CalendarScreen extends StatefulWidget {
   final VoidCallback? onBack;
+  final Function(int? patientId, String? patientName)? onNavigateToPatientDetail;
 
-  const CalendarScreen({super.key, this.onBack});
+  const CalendarScreen({
+    super.key,
+    this.onBack,
+    this.onNavigateToPatientDetail,
+  });
 
   @override
   State<CalendarScreen> createState() => _CalendarScreenState();
 }
 
 class _CalendarScreenState extends State<CalendarScreen> {
+  final SupabaseService _api = SupabaseService();
   late DateTime _currentMonth;
   late DateTime _selectedDate;
 
-  // Mock appointments data
+  // Appointments data
   final Map<String, List<_AppointmentData>> _appointments = {};
 
   @override
@@ -28,44 +37,59 @@ class _CalendarScreenState extends State<CalendarScreen> {
     _currentMonth = DateTime(now.year, now.month, 1);
     _selectedDate = now;
     _generateMockAppointments();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadMonthAppointments();
+    });
+  }
+
+  Future<void> _loadMonthAppointments() async {
+    try {
+      final supaAppointments = await _api.getCalendarAppointmentsForMonth(
+        _currentMonth.year,
+        _currentMonth.month,
+      );
+      if (supaAppointments.isNotEmpty && mounted) {
+        setState(() {
+          supaAppointments.forEach((key, list) {
+            _appointments[key] = list.map((item) => _AppointmentData(
+              patientId: item['patient_id'] as int?,
+              time: item['time'] ?? '09:00',
+              patient: item['patient'] ?? 'Paciente',
+              service: item['service'] ?? 'Consulta General',
+              status: item['status'] ?? 'Confirmada',
+            )).toList();
+          });
+        });
+      }
+    } catch (_) {}
   }
 
   void _generateMockAppointments() {
     final now = DateTime.now();
     final baseDate = DateTime(now.year, now.month, now.day);
 
-    _addAppointment(baseDate, '08:00', 'Ana García', 'Consulta General', 'Confirmada');
-    _addAppointment(baseDate, '08:30', 'Carlos López', 'Control', 'Confirmada');
-    _addAppointment(baseDate, '09:00', 'María Rodríguez', 'Odontología', 'Pendiente');
-    _addAppointment(baseDate, '10:00', 'Juan Perez', 'Seguimiento', 'Confirmada');
-    _addAppointment(baseDate, '11:30', 'Laura Sánchez', 'Pediatría', 'Pendiente');
-    _addAppointment(baseDate, '14:00', 'Pedro Martínez', 'Consulta General', 'Confirmada');
-    _addAppointment(baseDate, '15:00', 'Rosa Fernández', 'Laboratorio', 'Cancelada');
-    _addAppointment(baseDate, '16:30', 'Miguel Torres', 'Urgencia', 'Confirmada');
+    _addAppointment(baseDate, '08:00', 'Ana García López', 'Consulta General', 'Confirmada', patientId: 6);
+    _addAppointment(baseDate, '08:30', 'Carlos Ruiz Torres', 'Control', 'Confirmada', patientId: 2);
+    _addAppointment(baseDate, '09:00', 'Laura Gómez Pérez', 'Odontología', 'Pendiente', patientId: 3);
+    _addAppointment(baseDate, '10:00', 'Juan Carlos Mendoza', 'Seguimiento', 'Confirmada', patientId: 5);
+    _addAppointment(baseDate, '11:30', 'Mateo Garcia', 'Pediatría', 'Pendiente', patientId: 8);
+    _addAppointment(baseDate, '14:00', 'Ana Martínez Silva', 'Consulta General', 'Confirmada', patientId: 1);
+    _addAppointment(baseDate, '15:00', 'Sarah Jenkins', 'Laboratorio', 'Cancelada', patientId: 7);
+    _addAppointment(baseDate, '16:30', 'Miguel Vargas López', 'Urgencia', 'Confirmada', patientId: 4);
 
-    _addAppointment(baseDate.add(const Duration(days: 1)), '09:00', 'Sofía Herrera', 'Consulta General', 'Pendiente');
-    _addAppointment(baseDate.add(const Duration(days: 1)), '10:30', 'Diego Ruiz', 'Control', 'Confirmada');
-    _addAppointment(baseDate.add(const Duration(days: 1)), '13:00', 'Valentina Díaz', 'Pediatría', 'Confirmada');
+    _addAppointment(baseDate.add(const Duration(days: 1)), '09:00', 'Ana García López', 'Consulta General', 'Pendiente', patientId: 6);
+    _addAppointment(baseDate.add(const Duration(days: 1)), '10:30', 'Carlos Ruiz Torres', 'Control', 'Confirmada', patientId: 2);
+    _addAppointment(baseDate.add(const Duration(days: 1)), '13:00', 'Mateo Garcia', 'Pediatría', 'Confirmada', patientId: 8);
 
-    _addAppointment(baseDate.add(const Duration(days: 2)), '08:30', 'Fernando Morales', 'Odontología', 'Confirmada');
-    _addAppointment(baseDate.add(const Duration(days: 2)), '11:00', 'Camila Ortiz', 'Consulta General', 'Pendiente');
-
-    _addAppointment(baseDate.add(const Duration(days: 4)), '09:00', 'Andrés Vega', 'Control', 'Confirmada');
-    _addAppointment(baseDate.add(const Duration(days: 4)), '14:00', 'Lucía Mendoza', 'Laboratorio', 'Pendiente');
-    _addAppointment(baseDate.add(const Duration(days: 4)), '15:30', 'Ricardo Castro', 'Consulta General', 'Confirmada');
-
-    _addAppointment(baseDate.add(const Duration(days: 7)), '08:00', 'Elena Vargas', 'Seguimiento', 'Confirmada');
-    _addAppointment(baseDate.add(const Duration(days: 7)), '10:00', 'Pablo Flores', 'Odontología', 'Pendiente');
-
-    _addAppointment(baseDate.subtract(const Duration(days: 1)), '09:00', 'Isabel Ramírez', 'Consulta General', 'Confirmada');
-    _addAppointment(baseDate.subtract(const Duration(days: 1)), '11:00', 'Roberto Silva', 'Control', 'Confirmada');
-    _addAppointment(baseDate.subtract(const Duration(days: 3)), '14:00', 'Carmen Gutiérrez', 'Pediatría', 'Confirmada');
+    _addAppointment(baseDate.add(const Duration(days: 2)), '08:30', 'John Doe', 'Odontología', 'Confirmada', patientId: 9);
+    _addAppointment(baseDate.add(const Duration(days: 2)), '11:00', 'Hernaldo Noel Sevilla Cajina', 'Consulta General', 'Pendiente', patientId: 10);
   }
 
-  void _addAppointment(DateTime date, String time, String patient, String service, String status) {
+  void _addAppointment(DateTime date, String time, String patient, String service, String status, {int? patientId}) {
     final key = '${date.year}-${date.month}-${date.day}';
     _appointments.putIfAbsent(key, () => []);
     _appointments[key]!.add(_AppointmentData(
+      patientId: patientId,
       time: time,
       patient: patient,
       service: service,
@@ -174,6 +198,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   setState(() {
                     _currentMonth = DateTime(_currentMonth.year, _currentMonth.month - 1, 1);
                   });
+                  _loadMonthAppointments();
                 },
                 icon: const Icon(Icons.chevron_left, color: AppColors.textSecondary),
                 splashRadius: 18,
@@ -191,6 +216,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   setState(() {
                     _currentMonth = DateTime(_currentMonth.year, _currentMonth.month + 1, 1);
                   });
+                  _loadMonthAppointments();
                 },
                 icon: const Icon(Icons.chevron_right, color: AppColors.textSecondary),
                 splashRadius: 18,
@@ -409,85 +435,129 @@ class _CalendarScreenState extends State<CalendarScreen> {
         statusBg = AppColors.borderLight;
     }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.background,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.borderLight),
-      ),
-      child: Row(
-        children: [
-          // Time
-          Container(
-            width: 50,
-            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+    return Material(
+      color: Colors.transparent,
+      child: Tooltip(
+        message: 'Haga clic para ver el expediente clínico de ${apt.patient}',
+        child: InkWell(
+          onTap: () {
+            widget.onNavigateToPatientDetail?.call(apt.patientId, apt.patient);
+          },
+          borderRadius: BorderRadius.circular(10),
+          hoverColor: AppColors.primaryBlue.withValues(alpha: 0.05),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: AppColors.primaryBlue.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(6),
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.borderLight),
             ),
-            child: Center(
-              child: Text(
-                apt.time,
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primaryBlue,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          // Patient + Service
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Text(
-                  apt.patient,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
+                // Time
+                Container(
+                  width: 50,
+                  padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryBlue.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Center(
+                    child: Text(
+                      apt.time,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primaryBlue,
+                      ),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  apt.service,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textSecondary,
+                const SizedBox(width: 12),
+                // Patient + Service
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              apt.patient,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.all(3),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryBlue.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Icon(
+                              Icons.arrow_forward_rounded,
+                              size: 11,
+                              color: AppColors.primaryBlue,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        apt.service,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                // Status badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: statusBg,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    statusText,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: statusColor,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-          // Status badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: statusBg,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              statusText,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: statusColor,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 
   void _showNewAppointmentDialog() {
-    final patientCtrl = TextEditingController();
-    final serviceCtrl = TextEditingController();
+    Patient? selectedPatient;
+    final serviceCtrl = TextEditingController(text: 'Consulta General');
     String selectedTime = '09:00';
+    DateTime dialogDate = _selectedDate;
+    String? formError;
+
+    final quickServices = [
+      'Consulta General',
+      'Control Odontológico',
+      'Pediatría - Vacunación',
+      'Seguimiento Clínico',
+      'Urgencia',
+    ];
 
     showDialog(
       context: context,
@@ -505,48 +575,190 @@ class _CalendarScreenState extends State<CalendarScreen> {
             ],
           ),
           content: SizedBox(
-            width: 380,
+            width: 440,
             child: StatefulBuilder(
               builder: (context, setDialogState) {
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Fecha: ${_getDayName(_selectedDate.weekday)} ${_selectedDate.day} de ${_getMonthName(_selectedDate.month)}, ${_selectedDate.year}',
-                      style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: patientCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Nombre del Paciente',
-                        prefixIcon: Icon(Icons.person_outline, size: 20),
+                return SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Contenedor interactivo para editar la fecha
+                      InkWell(
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: dialogDate,
+                            firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                            lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
+                            helpText: 'Seleccionar Fecha de la Cita',
+                            cancelText: 'Cancelar',
+                            confirmText: 'Seleccionar',
+                          );
+                          if (picked != null) {
+                            setDialogState(() {
+                              dialogDate = picked;
+                            });
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryBlue.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppColors.primaryBlue.withValues(alpha: 0.2)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.calendar_month_outlined, size: 16, color: AppColors.primaryBlue),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Fecha: ${_getDayName(dialogDate.weekday)} ${dialogDate.day} de ${_getMonthName(dialogDate.month)}, ${dialogDate.year}',
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primaryBlue),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryBlue,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.edit_calendar, size: 13, color: AppColors.white),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Editar Fecha',
+                                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.white),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: serviceCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Servicio / Motivo',
-                        prefixIcon: Icon(Icons.medical_services_outlined, size: 20),
+                      const SizedBox(height: 16),
+
+                      // Autocomplete de pacientes registrados en la base de datos
+                      PatientAutocompleteField(
+                        onPatientSelected: (patient) {
+                          setDialogState(() {
+                            selectedPatient = patient;
+                            formError = null;
+                          });
+                        },
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue: selectedTime,
-                      decoration: const InputDecoration(
-                        labelText: 'Hora',
-                        prefixIcon: Icon(Icons.access_time, size: 20),
+                      const SizedBox(height: 14),
+
+                      // Campo editable de Motivo / Servicio
+                      TextFormField(
+                        controller: serviceCtrl,
+                        onChanged: (_) {
+                          if (formError != null) setDialogState(() => formError = null);
+                        },
+                        decoration: InputDecoration(
+                          labelText: 'Motivo / Servicio *',
+                          hintText: 'Escriba o elija el motivo...',
+                          prefixIcon: const Icon(Icons.medical_services_outlined, size: 20, color: AppColors.primaryBlue),
+                          suffixIcon: serviceCtrl.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 16, color: AppColors.textSecondary),
+                                  onPressed: () => setDialogState(() => serviceCtrl.clear()),
+                                )
+                              : null,
+                          filled: true,
+                          fillColor: AppColors.background,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.border)),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.border)),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.primaryBlue, width: 2)),
+                        ),
                       ),
-                      items: [
-                        '08:00', '08:30', '09:00', '09:30', '10:00', '10:30',
-                        '11:00', '11:30', '12:00', '13:00', '14:00', '14:30',
-                        '15:00', '15:30', '16:00', '16:30', '17:00',
-                      ].map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
-                      onChanged: (val) => setDialogState(() => selectedTime = val ?? '09:00'),
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      // Sugerencias rápidas de servicio (hacer clic para rellenar/editar)
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: quickServices.map((svc) {
+                          final isSelected = serviceCtrl.text == svc;
+                          return InkWell(
+                            onTap: () {
+                              setDialogState(() {
+                                serviceCtrl.text = svc;
+                                formError = null;
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(14),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: isSelected ? AppColors.primaryBlue : AppColors.primaryBlue.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: isSelected ? AppColors.primaryBlue : AppColors.primaryBlue.withValues(alpha: 0.2),
+                                ),
+                              ),
+                              child: Text(
+                                svc,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                  color: isSelected ? AppColors.white : AppColors.primaryBlue,
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Selector de hora
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedTime,
+                        decoration: InputDecoration(
+                          labelText: 'Hora',
+                          prefixIcon: const Icon(Icons.access_time, size: 20, color: AppColors.primaryBlue),
+                          filled: true,
+                          fillColor: AppColors.background,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.border)),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.border)),
+                        ),
+                        items: [
+                          '08:00', '08:30', '09:00', '09:30', '10:00', '10:30',
+                          '11:00', '11:30', '12:00', '13:00', '14:00', '14:30',
+                          '15:00', '15:30', '16:00', '16:30', '17:00',
+                        ].map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                        onChanged: (val) => setDialogState(() => selectedTime = val ?? '09:00'),
+                      ),
+
+                      if (formError != null) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: AppColors.dangerLight,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppColors.danger.withValues(alpha: 0.4)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.error_outline, size: 16, color: AppColors.danger),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  formError!,
+                                  style: const TextStyle(fontSize: 12, color: AppColors.danger, fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 );
               },
             ),
@@ -558,44 +770,74 @@ class _CalendarScreenState extends State<CalendarScreen> {
             ),
             ElevatedButton(
               onPressed: () async {
-                if (patientCtrl.text.isNotEmpty && serviceCtrl.text.isNotEmpty) {
-                  final pName = patientCtrl.text.trim();
-                  final sName = serviceCtrl.text.trim();
-                  setState(() {
-                    _addAppointment(
-                      _selectedDate,
-                      selectedTime,
-                      pName,
-                      sName,
-                      'Pendiente',
-                    );
-                  });
+                if (selectedPatient == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Debe seleccionar un paciente registrado en la base de datos.'),
+                      backgroundColor: AppColors.warning,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                  return;
+                }
+                if (serviceCtrl.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Por favor indique el motivo o servicio de la cita.'),
+                      backgroundColor: AppColors.warning,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                  return;
+                }
 
-                  final now = DateTime.now();
-                  if (_isSameDay(_selectedDate, now)) {
-                    final apt = Appointment(
-                      patientId: 5,
-                      doctorId: 1,
-                      serviceId: 1,
-                      appointmentDate: _selectedDate,
-                      appointmentTime: selectedTime,
-                      status: 'En Espera',
-                      patientName: pName,
-                      serviceName: sName,
-                    );
-                    await context.read<DashboardProvider>().addAppointment(apt);
-                  }
+                final pName = selectedPatient!.fullName;
+                final pId = selectedPatient!.id ?? 1;
+                final sName = serviceCtrl.text.trim();
 
-                  if (ctx.mounted) Navigator.pop(ctx);
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Cita agendada para $pName a las $selectedTime.'),
-                        backgroundColor: AppColors.success,
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  }
+                setState(() {
+                  _selectedDate = dialogDate;
+                  _addAppointment(
+                    dialogDate,
+                    selectedTime,
+                    pName,
+                    sName,
+                    'Pendiente',
+                    patientId: pId,
+                  );
+                });
+
+                final dashboard = context.read<DashboardProvider>();
+                final messenger = ScaffoldMessenger.of(context);
+
+                final apt = Appointment(
+                  patientId: pId,
+                  doctorId: 1,
+                  serviceId: 1,
+                  appointmentDate: dialogDate,
+                  appointmentTime: selectedTime,
+                  status: 'Pendiente',
+                  patientName: pName,
+                  serviceName: sName,
+                );
+                await _api.addAppointment(apt);
+
+                final now = DateTime.now();
+                if (_isSameDay(dialogDate, now)) {
+                  await dashboard.loadDashboard();
+                }
+                await _loadMonthAppointments();
+
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (mounted) {
+                  final dateStr = '${dialogDate.day}/${dialogDate.month}/${dialogDate.year}';
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text('Cita agendada para $pName el $dateStr a las $selectedTime.'),
+                      backgroundColor: AppColors.success,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
                 }
               },
               child: const Text('Agendar Cita'),
@@ -625,12 +867,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
 }
 
 class _AppointmentData {
+  final int? patientId;
   final String time;
   final String patient;
   final String service;
   final String status;
 
   const _AppointmentData({
+    this.patientId,
     required this.time,
     required this.patient,
     required this.service,

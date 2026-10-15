@@ -4,11 +4,11 @@ import '../models/prescription.dart';
 import '../models/diagnostic_file.dart';
 import '../models/odontogram_finding.dart';
 import '../models/growth_record.dart';
-import '../services/mock_api_service.dart';
+import '../services/supabase_service.dart';
 
 // ─── CONSULTATION PROVIDER ───
 class ConsultationProvider extends ChangeNotifier {
-  final MockApiService _api = MockApiService();
+  final SupabaseService _api = SupabaseService();
 
   bool _isLoading = false;
   SoapConsultation? _currentConsultation;
@@ -18,11 +18,15 @@ class ConsultationProvider extends ChangeNotifier {
   SoapConsultation? get currentConsultation => _currentConsultation;
   VitalSigns get vitalSigns => _vitalSigns;
 
-  Future<void> loadConsultation(String patientName, String patientCode) async {
+  Future<void> loadConsultation(String patientName, String patientCode, {int? patientId}) async {
     _isLoading = true;
     notifyListeners();
 
-    _currentConsultation = await _api.getInitialSoapConsultation(patientName, patientCode);
+    _currentConsultation = await _api.getInitialSoapConsultation(
+      patientName,
+      patientCode,
+      patientId: patientId,
+    );
     if (_currentConsultation != null) {
       _vitalSigns = _currentConsultation!.vitalSigns;
     }
@@ -57,16 +61,24 @@ class ConsultationProvider extends ChangeNotifier {
     required String assessment,
     required String plan,
     bool isFinalized = false,
+    int? patientId,
+    String? patientName,
+    String? patientCode,
   }) async {
     _isLoading = true;
     notifyListeners();
 
+    final targetPatientId = patientId ?? _currentConsultation?.patientId ?? 1;
+    final targetPatientName = patientName ?? _currentConsultation?.patientName ?? 'Paciente';
+    final targetPatientCode = patientCode ?? _currentConsultation?.patientCode ?? 'PT-000';
+
     final updated = SoapConsultation(
-      patientId: _currentConsultation?.patientId ?? 987654,
+      id: _currentConsultation?.id,
+      patientId: targetPatientId,
       doctorId: 1,
       date: DateTime.now(),
-      patientName: _currentConsultation?.patientName ?? 'Juan Perez',
-      patientCode: _currentConsultation?.patientCode ?? '987654',
+      patientName: targetPatientName,
+      patientCode: targetPatientCode,
       vitalSigns: _vitalSigns,
       subjective: subjective,
       objective: objective,
@@ -86,7 +98,7 @@ class ConsultationProvider extends ChangeNotifier {
 
 // ─── PRESCRIPTION PROVIDER ───
 class PrescriptionProvider extends ChangeNotifier {
-  final MockApiService _api = MockApiService();
+  final SupabaseService _api = SupabaseService();
 
   bool _isLoading = false;
   Prescription? _prescription;
@@ -95,11 +107,11 @@ class PrescriptionProvider extends ChangeNotifier {
   Prescription? get prescription => _prescription;
   List<PrescriptionItem> get items => _prescription?.items ?? [];
 
-  Future<void> loadPrescription() async {
+  Future<void> loadPrescription({int? patientId}) async {
     _isLoading = true;
     notifyListeners();
 
-    _prescription = await _api.getActivePrescription();
+    _prescription = await _api.getActivePrescription(patientId: patientId);
 
     _isLoading = false;
     notifyListeners();
@@ -107,22 +119,38 @@ class PrescriptionProvider extends ChangeNotifier {
 
   void addItem(PrescriptionItem item) {
     if (_prescription == null) return;
-    final updatedList = List<PrescriptionItem>.from(_prescription!.items)..add(item);
+    final updatedList = List<PrescriptionItem>.from(_prescription!.items)
+      ..add(item);
     _prescription = _prescription!.copyWith(items: updatedList);
     notifyListeners();
   }
 
   void removeItem(int index) {
     if (_prescription == null) return;
-    final updatedList = List<PrescriptionItem>.from(_prescription!.items)..removeAt(index);
+    final updatedList = List<PrescriptionItem>.from(_prescription!.items)
+      ..removeAt(index);
     _prescription = _prescription!.copyWith(items: updatedList);
     notifyListeners();
+  }
+
+  Future<bool> savePrescription(int patientId) async {
+    if (_prescription == null) return false;
+    _isLoading = true;
+    notifyListeners();
+
+    final success = await _api.savePrescription(
+      patientId: patientId,
+      items: _prescription!.items,
+    );
+    _isLoading = false;
+    notifyListeners();
+    return success;
   }
 }
 
 // ─── DIAGNOSTIC PROVIDER ───
 class DiagnosticProvider extends ChangeNotifier {
-  final MockApiService _api = MockApiService();
+  final SupabaseService _api = SupabaseService();
 
   bool _isLoading = false;
   List<DiagnosticFile> _files = [];
@@ -134,6 +162,7 @@ class DiagnosticProvider extends ChangeNotifier {
     if (_selectedCategory == 'All Categories') return _files;
     return _files.where((f) => f.category == _selectedCategory).toList();
   }
+
   DiagnosticFile? get selectedFile => _selectedFile;
   String get selectedCategory => _selectedCategory;
 
@@ -143,7 +172,9 @@ class DiagnosticProvider extends ChangeNotifier {
 
     _files = await _api.getDiagnosticFiles(patientId);
     if (_files.isNotEmpty && _selectedFile == null) {
-      _selectedFile = _files.length > 1 ? _files[1] : _files.first; // Default to Blood Panel
+      _selectedFile = _files.length > 1
+          ? _files[1]
+          : _files.first; // Default to Blood Panel
     }
 
     _isLoading = false;
@@ -169,15 +200,16 @@ class DiagnosticProvider extends ChangeNotifier {
 
 // ─── ODONTOLOGY PROVIDER ───
 class OdontologyProvider extends ChangeNotifier {
-  final MockApiService _api = MockApiService();
+  final SupabaseService _api = SupabaseService();
 
   bool _isLoading = false;
   Map<int, DentalToothState> _teethState = {};
   List<DentalProcedureLog> _logs = [];
-  DmftSummary _dmft = const DmftSummary(decayed: 2, missing: 0, filled: 2);
-  int _selectedTooth = 16;
-  final Set<String> _selectedSurfaces = {'O'};
-  String _selectedCondition = 'Caries';
+  DmftSummary _dmft = const DmftSummary(decayed: 0, missing: 0, filled: 0);
+  int _selectedTooth = 18;
+  final Set<String> _selectedSurfaces = {};
+  String _selectedCondition = 'Sano';
+  int? _currentPatientId;
 
   bool get isLoading => _isLoading;
   Map<int, DentalToothState> get teethState => _teethState;
@@ -186,14 +218,36 @@ class OdontologyProvider extends ChangeNotifier {
   int get selectedTooth => _selectedTooth;
   Set<String> get selectedSurfaces => _selectedSurfaces;
   String get selectedCondition => _selectedCondition;
+  int? get currentPatientId => _currentPatientId;
 
-  Future<void> loadOdontologyData(int patientId) async {
+  void clear() {
+    _currentPatientId = null;
+    _teethState = {};
+    _logs = [];
+    _dmft = const DmftSummary(decayed: 0, missing: 0, filled: 0);
+    _selectedTooth = 18;
+    _selectedSurfaces.clear();
+    _selectedCondition = 'Sano';
+    notifyListeners();
+  }
+
+  Future<void> loadOdontologyData(int? patientId) async {
+    if (patientId == null || patientId <= 0) {
+      clear();
+      return;
+    }
+
     _isLoading = true;
+    _currentPatientId = patientId;
     notifyListeners();
 
-    _teethState = await _api.getOdontogramState(patientId);
-    _logs = await _api.getDentalProcedureLogs(patientId);
-    _recalculateDmft();
+    try {
+      _teethState = await _api.getOdontogramState(patientId);
+      _logs = await _api.getDentalProcedureLogs(patientId);
+      _recalculateDmft();
+    } catch (e) {
+      debugPrint('Error cargando datos de odontología: $e');
+    }
 
     _isLoading = false;
     notifyListeners();
@@ -202,8 +256,8 @@ class OdontologyProvider extends ChangeNotifier {
   void selectTooth(int tooth) {
     _selectedTooth = tooth;
     final current = _teethState[tooth];
+    _selectedSurfaces.clear();
     if (current != null) {
-      _selectedSurfaces.clear();
       _selectedSurfaces.addAll(current.affectedSurfaces);
       switch (current.condition) {
         case ToothCondition.caries:
@@ -219,6 +273,8 @@ class OdontologyProvider extends ChangeNotifier {
           _selectedCondition = 'Sano';
           break;
       }
+    } else {
+      _selectedCondition = 'Sano';
     }
     notifyListeners();
   }
@@ -237,42 +293,134 @@ class OdontologyProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addFinding({required String procedureName, String? notes}) {
-    ToothCondition condition;
-    final condLower = _selectedCondition.toLowerCase();
-    if (condLower.contains('caries')) {
-      condition = ToothCondition.caries;
-    } else if (condLower.contains('tratado') || condLower.contains('restor') || condLower.contains('treated')) {
-      condition = ToothCondition.treated;
-    } else if (condLower.contains('ausente') || condLower.contains('extrac') || condLower.contains('missing')) {
-      condition = ToothCondition.missing;
+  Future<bool> addFinding({
+    required String procedureName,
+    int? toothNumber,
+    ToothCondition? condition,
+    List<String>? surfaces,
+    String? notes,
+    double? cost,
+    String? anesthesia,
+    String status = 'Pendiente',
+    int? patientId,
+  }) async {
+    final pId = patientId ?? _currentPatientId;
+    if (pId == null || pId <= 0) return false;
+
+    final tooth = toothNumber ?? _selectedTooth;
+    final surf = surfaces ?? _selectedSurfaces.toList();
+
+    ToothCondition resolvedCondition;
+    if (condition != null) {
+      resolvedCondition = condition;
     } else {
-      condition = ToothCondition.healthy;
+      final condLower = _selectedCondition.toLowerCase();
+      if (condLower.contains('caries')) {
+        resolvedCondition = ToothCondition.caries;
+      } else if (condLower.contains('tratado') ||
+          condLower.contains('restor') ||
+          condLower.contains('treated') ||
+          condLower.contains('corona') ||
+          condLower.contains('obtur')) {
+        resolvedCondition = ToothCondition.treated;
+      } else if (condLower.contains('ausente') ||
+          condLower.contains('extrac') ||
+          condLower.contains('missing') ||
+          condLower.contains('perdid')) {
+        resolvedCondition = ToothCondition.missing;
+      } else {
+        resolvedCondition = ToothCondition.healthy;
+      }
     }
 
-    _teethState[_selectedTooth] = DentalToothState(
-      toothNumber: _selectedTooth,
-      condition: condition,
-      affectedSurfaces: _selectedSurfaces.toList(),
+    // Actualización optimista inmediata
+    _teethState[tooth] = DentalToothState(
+      toothNumber: tooth,
+      condition: resolvedCondition,
+      affectedSurfaces: surf,
       activeProcedure: procedureName,
     );
 
     _logs.insert(
       0,
       DentalProcedureLog(
-        patientId: 88241,
+        patientId: pId,
         date: DateTime.now(),
-        toothNumber: _selectedTooth,
-        procedureName: procedureName.isNotEmpty ? procedureName : 'Evaluación y Diagnóstico',
-        status: 'Pendiente',
-        providerName: 'Dra. A. Smith',
+        toothNumber: tooth,
+        procedureName: procedureName.isNotEmpty ? procedureName : 'Evaluación Dental',
+        status: status,
+        providerName: 'Dr. Odontólogo',
         notes: notes,
-        surfaces: _selectedSurfaces.toList(),
+        surfaces: surf,
+        cost: cost,
+        condition: _selectedCondition,
+        anesthesia: anesthesia,
       ),
     );
 
     _recalculateDmft();
     notifyListeners();
+
+    // Guardado persistente en Supabase
+    final success = await _api.saveOdontogramFinding(
+      patientId: pId,
+      toothNumber: tooth,
+      condition: resolvedCondition,
+      surfaces: surf,
+      procedureName: procedureName.isNotEmpty ? procedureName : 'Evaluación Dental',
+      status: status,
+      notes: notes,
+      cost: cost,
+      anesthesia: anesthesia,
+    );
+
+    // Recargar para sincronizar IDs reales de Supabase
+    await loadOdontologyData(pId);
+    return success;
+  }
+
+  Future<bool> updateProcedureStatus(int logId, String newStatus) async {
+    final success = await _api.updateOdontogramStatus(logId, newStatus);
+    if (success && _currentPatientId != null) {
+      await loadOdontologyData(_currentPatientId!);
+    }
+    return success;
+  }
+
+  Future<bool> updateFinding({
+    required int logId,
+    required int toothNumber,
+    required ToothCondition condition,
+    required List<String> surfaces,
+    required String procedureName,
+    required String status,
+    String? notes,
+    double? cost,
+    String? anesthesia,
+  }) async {
+    final success = await _api.updateOdontogramFinding(
+      findingId: logId,
+      toothNumber: toothNumber,
+      condition: condition,
+      surfaces: surfaces,
+      procedureName: procedureName,
+      status: status,
+      notes: notes,
+      cost: cost,
+      anesthesia: anesthesia,
+    );
+    if (success && _currentPatientId != null) {
+      await loadOdontologyData(_currentPatientId!);
+    }
+    return success;
+  }
+
+  Future<bool> deleteFinding(int logId) async {
+    final success = await _api.deleteOdontogramFinding(logId);
+    if (success && _currentPatientId != null) {
+      await loadOdontologyData(_currentPatientId!);
+    }
+    return success;
   }
 
   void _recalculateDmft() {
@@ -290,7 +438,7 @@ class OdontologyProvider extends ChangeNotifier {
 
 // ─── PEDIATRICS PROVIDER ───
 class PediatricsProvider extends ChangeNotifier {
-  final MockApiService _api = MockApiService();
+  final SupabaseService _api = SupabaseService();
 
   bool _isLoading = false;
   List<GrowthRecord> _records = [];

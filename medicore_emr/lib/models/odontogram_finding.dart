@@ -41,10 +41,13 @@ class DentalProcedureLog {
   final DateTime date;
   final int toothNumber;
   final String procedureName;
-  final String status; // 'Pending', 'Completed'
+  final String status; // 'Pending', 'Completed', 'Cancelled'
   final String providerName;
   final String? notes;
   final List<String> surfaces;
+  final double? cost;
+  final String? condition;
+  final String? anesthesia;
 
   DentalProcedureLog({
     this.id,
@@ -56,7 +59,40 @@ class DentalProcedureLog {
     required this.providerName,
     this.notes,
     this.surfaces = const [],
+    this.cost,
+    this.condition,
+    this.anesthesia,
   });
+
+  DentalProcedureLog copyWith({
+    int? id,
+    int? patientId,
+    DateTime? date,
+    int? toothNumber,
+    String? procedureName,
+    String? status,
+    String? providerName,
+    String? notes,
+    List<String>? surfaces,
+    double? cost,
+    String? condition,
+    String? anesthesia,
+  }) {
+    return DentalProcedureLog(
+      id: id ?? this.id,
+      patientId: patientId ?? this.patientId,
+      date: date ?? this.date,
+      toothNumber: toothNumber ?? this.toothNumber,
+      procedureName: procedureName ?? this.procedureName,
+      status: status ?? this.status,
+      providerName: providerName ?? this.providerName,
+      notes: notes ?? this.notes,
+      surfaces: surfaces ?? this.surfaces,
+      cost: cost ?? this.cost,
+      condition: condition ?? this.condition,
+      anesthesia: anesthesia ?? this.anesthesia,
+    );
+  }
 
   Map<String, dynamic> toMap() {
     return {
@@ -69,6 +105,9 @@ class DentalProcedureLog {
       'provider_name': providerName,
       'notes': notes,
       'surfaces': json.encode(surfaces),
+      'cost': cost,
+      'condition': condition,
+      'anesthesia': anesthesia,
     };
   }
 
@@ -93,6 +132,9 @@ class DentalProcedureLog {
       providerName: map['provider_name'] as String,
       notes: map['notes'] as String?,
       surfaces: parsedSurfaces,
+      cost: (map['cost'] as num?)?.toDouble(),
+      condition: map['condition'] as String?,
+      anesthesia: map['anesthesia'] as String?,
     );
   }
 

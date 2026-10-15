@@ -14,8 +14,8 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
-  final _usernameController = TextEditingController(text: 'dr.smith@medicore.com');
-  final _passwordController = TextEditingController(text: 'password123');
+  final _usernameController = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   late AnimationController _animController;
   late Animation<double> _fadeAnimation;
@@ -23,6 +23,11 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<AuthProvider>().clearError();
+      }
+    });
     _animController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
@@ -187,7 +192,10 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                           style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
                         ),
                         TextButton(
-                          onPressed: () => Navigator.pushNamed(context, AppRoutes.register),
+                          onPressed: () {
+                            context.read<AuthProvider>().clearError();
+                            Navigator.pushNamed(context, AppRoutes.register);
+                          },
                           child: const Text(
                             'Registrarse',
                             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.primaryBlue),

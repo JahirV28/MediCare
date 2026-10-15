@@ -28,6 +28,11 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<AuthProvider>().clearError();
+      }
+    });
     _animController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
@@ -136,7 +141,13 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                     // Provider ID
                     CustomTextField(
                       label: 'ID de Proveedor',
-                      hintText: 'Ej. DRS-001',
+                      hintText: _selectedRole == 'Doctor'
+                          ? 'Ej. DRS-001 (Opcional, se autogenera)'
+                          : _selectedRole == 'Nurse'
+                              ? 'Ej. NUR-001 (Opcional, se autogenera)'
+                              : _selectedRole == 'Admin'
+                                  ? 'Ej. ADM-001 (Opcional, se autogenera)'
+                                  : 'Ej. REC-001 (Opcional, se autogenera)',
                       prefixIcon: Icons.badge_outlined,
                       controller: _providerIdController,
                     ),
@@ -256,7 +267,10 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                           style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
                         ),
                         TextButton(
-                          onPressed: () => Navigator.pushReplacementNamed(context, AppRoutes.login),
+                          onPressed: () {
+                            context.read<AuthProvider>().clearError();
+                            Navigator.pushReplacementNamed(context, AppRoutes.login);
+                          },
                           child: const Text(
                             'Iniciar Sesión',
                             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.primaryBlue),
@@ -304,16 +318,18 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
     if (_formKey.currentState!.validate()) {
       final auth = context.read<AuthProvider>();
       final success = await auth.register(
-        fullName: _nameController.text,
-        email: _emailController.text,
+        fullName: _nameController.text.trim(),
+        email: _emailController.text.trim(),
         password: _passwordController.text,
         role: _selectedRole,
+        providerId: _providerIdController.text.trim().isEmpty ? null : _providerIdController.text.trim(),
       );
       if (success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Cuenta creada exitosamente. Inicia sesión.'),
+            content: Text('¡Cuenta creada exitosamente! Ya puedes iniciar sesión con tu correo o ID de Proveedor.'),
             backgroundColor: AppColors.success,
+            duration: Duration(seconds: 4),
           ),
         );
         Navigator.pushReplacementNamed(context, AppRoutes.login);

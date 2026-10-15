@@ -604,3 +604,391 @@ EXCEPTION
   WHEN duplicate_object THEN null;
   WHEN undefined_object THEN null;
 END $$;
+
+
+-- ============================================================
+-- PROCEDIMIENTOS ALMACENADOS Y FUNCIONES RPC (STORED PROCEDURES)
+-- ============================================================
+
+-- 1. Registro Atómico de Paciente y Contacto
+CREATE OR REPLACE FUNCTION public.sp_register_patient_with_contact(
+  p_full_name VARCHAR(150),
+  p_identity_number VARCHAR(50),
+  p_birth_date DATE,
+  p_gender VARCHAR(20),
+  p_blood_type VARCHAR(10) DEFAULT NULL,
+  p_phone VARCHAR(30) DEFAULT NULL,
+  p_email VARCHAR(150) DEFAULT NULL,
+  p_address TEXT DEFAULT NULL,
+  p_has_alert BOOLEAN DEFAULT FALSE,
+  p_patient_code VARCHAR(50) DEFAULT NULL,
+  p_contact_name VARCHAR(150) DEFAULT NULL,
+  p_contact_relationship VARCHAR(50) DEFAULT NULL,
+  p_contact_phone VARCHAR(30) DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_patient_id BIGINT;
+  v_generated_code VARCHAR(50);
+  v_result JSONB;
+BEGIN
+  IF p_patient_code IS NULL OR trim(p_patient_code) = '' THEN
+    v_generated_code := 'PT-' || lpad(cast(floor(random() * 9000 + 1000) as text), 4, '0') || '-' || to_char(CURRENT_DATE, 'YY');
+  ELSE
+    v_generated_code := p_patient_code;
+  END IF;
+
+  INSERT INTO public.patients (
+    patient_code, full_name, identity_number, birth_date, gender,
+    blood_type, phone, email, address, is_active, has_alert
+  ) VALUES (
+    v_generated_code, p_full_name, p_identity_number, p_birth_date, p_gender,
+    p_blood_type, p_phone, p_email, p_address, TRUE, p_has_alert
+  ) RETURNING id INTO v_patient_id;
+
+  IF p_contact_name IS NOT NULL AND trim(p_contact_name) <> '' THEN
+    INSERT INTO public.emergency_contacts (
+      patient_id, contact_name, relationship, phone
+    ) VALUES (
+      v_patient_id, p_contact_name, p_contact_relationship, COALESCE(p_contact_phone, '')
+    );
+  END IF;
+
+  SELECT jsonb_build_object(
+    'success', TRUE,
+    'patient_id', v_patient_id,
+    'patient_code', v_generated_code,
+    'message', 'Paciente registrado exitosamente'
+  ) INTO v_result;
+
+  RETURN v_result;
+EXCEPTION WHEN OTHERS THEN
+  RETURN jsonb_build_object(
+    'success', FALSE,
+    'error', SQLERRM
+  );
+END;
+$$;
+
+-- 2. Agendar Cita con Validación de Disponibilidad
+CREATE OR REPLACE FUNCTION public.sp_book_appointment(
+  p_patient_id BIGINT,
+  p_doctor_id BIGINT,
+  p_service_id BIGINT,
+  p_appointment_date DATE,
+  p_appointment_time TIME,
+  p_notes TEXT DEFAULT NULL,
+  p_status VARCHAR(50) DEFAULT 'Confirmed'
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_existing_id BIGINT;
+  v_new_appointment_id BIGINT;
+  v_doctor_name VARCHAR(150);
+BEGIN
+  SELECT id INTO v_existing_id
+  FROM public.appointments
+  WHERE doctor_id = p_doctor_id
+    AND appointment_date = p_appointment_date
+    AND appointment_time = p_appointment_time
+    AND status NOT IN ('Cancelled', 'Cancelado')
+  LIMIT 1;
+
+  IF v_existing_id IS NOT NULL THEN
+    SELECT full_name INTO v_doctor_name FROM public.users WHERE id = p_doctor_id;
+    RETURN jsonb_build_object(
+      'success', FALSE,
+      'code', 'DOCTOR_UNAVAILABLE',
+      'message', format('El doctor %s ya tiene una cita agendada para el %s a las %s.', COALESCE(v_doctor_name, 'seleccionado'), p_appointment_date, p_appointment_time)
+    );
+  END IF;
+
+  INSERT INTO public.appointments (
+    patient_id, doctor_id, service_id, appointment_date, appointment_time, status, notes
+  ) VALUES (
+    p_patient_id, p_doctor_id, p_service_id, p_appointment_date, p_appointment_time, p_status, p_notes
+  ) RETURNING id INTO v_new_appointment_id;
+
+  RETURN jsonb_build_object(
+    'success', TRUE,
+    'appointment_id', v_new_appointment_id,
+    'message', 'Cita agendada exitosamente'
+  );
+EXCEPTION WHEN OTHERS THEN
+  RETURN jsonb_build_object(
+    'success', FALSE,
+    'error', SQLERRM
+  );
+END;
+$$;
+
+-- 3. Guardar Consulta SOAP y Signos Vitales
+CREATE OR REPLACE FUNCTION public.sp_save_consultation_with_vitals(
+  p_patient_id BIGINT,
+  p_doctor_id BIGINT,
+  p_subjective TEXT,
+  p_objective TEXT,
+  p_assessment TEXT,
+  p_plan TEXT,
+  p_icd10_code VARCHAR(20) DEFAULT NULL,
+  p_status VARCHAR(50) DEFAULT 'Draft',
+  p_consultation_id BIGINT DEFAULT NULL,
+  p_bp_systolic INT DEFAULT NULL,
+  p_bp_diastolic INT DEFAULT NULL,
+  p_heart_rate INT DEFAULT NULL,
+  p_temperature NUMERIC(4, 1) DEFAULT NULL,
+  p_weight_kg NUMERIC(5, 2) DEFAULT NULL,
+  p_height_cm NUMERIC(5, 2) DEFAULT NULL,
+  p_respiratory_rate INT DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_consultation_id BIGINT;
+  v_bmi NUMERIC(4, 1) := NULL;
+  v_doctor_name VARCHAR(150);
+BEGIN
+  IF p_weight_kg IS NOT NULL AND p_height_cm IS NOT NULL AND p_height_cm > 0 THEN
+    v_bmi := round((p_weight_kg / ((p_height_cm / 100.0) ^ 2))::numeric, 1);
+  END IF;
+
+  IF p_consultation_id IS NOT NULL AND p_consultation_id > 0 THEN
+    UPDATE public.soap_consultations SET
+      subjective = p_subjective,
+      objective = p_objective,
+      assessment = p_assessment,
+      plan = p_plan,
+      icd10_code = p_icd10_code,
+      status = p_status,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = p_consultation_id;
+    v_consultation_id := p_consultation_id;
+  ELSE
+    INSERT INTO public.soap_consultations (
+      patient_id, doctor_id, consultation_date, subjective, objective, assessment, plan, icd10_code, status
+    ) VALUES (
+      p_patient_id, p_doctor_id, CURRENT_TIMESTAMP, p_subjective, p_objective, p_assessment, p_plan, p_icd10_code, p_status
+    ) RETURNING id INTO v_consultation_id;
+  END IF;
+
+  IF p_bp_systolic IS NOT NULL OR p_temperature IS NOT NULL OR p_weight_kg IS NOT NULL OR p_heart_rate IS NOT NULL THEN
+    IF EXISTS (SELECT 1 FROM public.vital_signs WHERE consultation_id = v_consultation_id) THEN
+      UPDATE public.vital_signs SET
+        bp_systolic = p_bp_systolic,
+        bp_diastolic = p_bp_diastolic,
+        heart_rate = p_heart_rate,
+        temperature = p_temperature,
+        weight_kg = p_weight_kg,
+        height_cm = p_height_cm,
+        bmi = v_bmi,
+        respiratory_rate = p_respiratory_rate,
+        recorded_at = CURRENT_TIMESTAMP,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE consultation_id = v_consultation_id;
+    ELSE
+      INSERT INTO public.vital_signs (
+        consultation_id, patient_id, bp_systolic, bp_diastolic, heart_rate,
+        temperature, weight_kg, height_cm, bmi, respiratory_rate, recorded_at
+      ) VALUES (
+        v_consultation_id, p_patient_id, p_bp_systolic, p_bp_diastolic, p_heart_rate,
+        p_temperature, p_weight_kg, p_height_cm, v_bmi, p_respiratory_rate, CURRENT_TIMESTAMP
+      );
+    END IF;
+  END IF;
+
+  IF p_status = 'Finalized' THEN
+    SELECT full_name INTO v_doctor_name FROM public.users WHERE id = p_doctor_id;
+
+    INSERT INTO public.clinical_records (
+      patient_id, doctor_id, record_type, title, description, record_date, tags
+    ) VALUES (
+      p_patient_id,
+      p_doctor_id,
+      'CONSULTA GENERAL',
+      COALESCE('Consulta: ' || p_assessment, 'Consulta Médica Finalizada'),
+      format('Diagnóstico CIE-10: %s. Plan: %s', COALESCE(p_icd10_code, 'N/A'), COALESCE(p_plan, 'Sin plan específico')),
+      CURRENT_TIMESTAMP,
+      jsonb_build_array(COALESCE(v_doctor_name, 'Médico'), 'SOAP Finalizada')
+    );
+
+    UPDATE public.appointments
+    SET status = 'Completed', updated_at = CURRENT_TIMESTAMP
+    WHERE patient_id = p_patient_id
+      AND doctor_id = p_doctor_id
+      AND appointment_date = CURRENT_DATE
+      AND status IN ('Confirmed', 'Waiting');
+  END IF;
+
+  RETURN jsonb_build_object(
+    'success', TRUE,
+    'consultation_id', v_consultation_id,
+    'status', p_status,
+    'bmi', v_bmi,
+    'message', 'Consulta y signos vitales guardados exitosamente'
+  );
+EXCEPTION WHEN OTHERS THEN
+  RETURN jsonb_build_object(
+    'success', FALSE,
+    'error', SQLERRM
+  );
+END;
+$$;
+
+-- 4. Emitir Receta con Medicamentos
+CREATE OR REPLACE FUNCTION public.sp_create_prescription_with_items(
+  p_patient_id BIGINT,
+  p_doctor_id BIGINT,
+  p_consultation_id BIGINT DEFAULT NULL,
+  p_clinic_name VARCHAR(150) DEFAULT 'Clínica Sanitas Central',
+  p_clinic_address VARCHAR(255) DEFAULT 'Av. Principal 123, Ciudad • Tel: 555-0192',
+  p_notes TEXT DEFAULT NULL,
+  p_items JSONB DEFAULT '[]'::jsonb
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_prescription_id BIGINT;
+  v_item JSONB;
+  v_items_count INT := 0;
+BEGIN
+  INSERT INTO public.prescriptions (
+    patient_id, doctor_id, consultation_id, clinic_name, clinic_address, prescription_date, notes
+  ) VALUES (
+    p_patient_id, p_doctor_id, p_consultation_id, p_clinic_name, p_clinic_address, CURRENT_DATE, p_notes
+  ) RETURNING id INTO v_prescription_id;
+
+  FOR v_item IN SELECT * FROM jsonb_array_elements(p_items)
+  LOOP
+    INSERT INTO public.prescription_items (
+      prescription_id, drug_name, dose, frequency, duration, instructions
+    ) VALUES (
+      v_prescription_id,
+      (v_item->>'drug_name'),
+      COALESCE(v_item->>'dose', '1 dosis'),
+      COALESCE(v_item->>'frequency', 'Cada 8h'),
+      COALESCE(v_item->>'duration', '5 días'),
+      v_item->>'instructions'
+    );
+    v_items_count := v_items_count + 1;
+  END LOOP;
+
+  RETURN jsonb_build_object(
+    'success', TRUE,
+    'prescription_id', v_prescription_id,
+    'items_count', v_items_count,
+    'message', 'Receta médica emitida exitosamente con todos sus medicamentos'
+  );
+EXCEPTION WHEN OTHERS THEN
+  RETURN jsonb_build_object(
+    'success', FALSE,
+    'error', SQLERRM
+  );
+END;
+$$;
+
+-- 5. Métricas y Analítica para el Dashboard
+CREATE OR REPLACE FUNCTION public.sp_get_dashboard_analytics()
+RETURNS JSONB
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_appointments_today INT;
+  v_active_patients INT;
+  v_daily_income NUMERIC(10, 2);
+  v_weekly_activity JSONB;
+  v_status_breakdown JSONB;
+BEGIN
+  SELECT COUNT(*) INTO v_appointments_today
+  FROM public.appointments
+  WHERE appointment_date = CURRENT_DATE;
+
+  SELECT COUNT(*) INTO v_active_patients
+  FROM public.patients
+  WHERE is_active = TRUE;
+
+  SELECT COALESCE(SUM(amount), 0.00) INTO v_daily_income
+  FROM public.financial_transactions
+  WHERE status = 'Paid'
+    AND transaction_date::date = CURRENT_DATE;
+
+  SELECT jsonb_object_agg(status, count) INTO v_status_breakdown
+  FROM (
+    SELECT status, COUNT(*) as count
+    FROM public.appointments
+    WHERE appointment_date = CURRENT_DATE
+    GROUP BY status
+  ) s;
+
+  SELECT jsonb_agg(coalesce(c.cnt, 0) ORDER BY d.day) INTO v_weekly_activity
+  FROM generate_series(CURRENT_DATE - INTERVAL '6 days', CURRENT_DATE, INTERVAL '1 day') AS d(day)
+  LEFT JOIN (
+    SELECT appointment_date, count(*) as cnt
+    FROM public.appointments
+    WHERE appointment_date >= CURRENT_DATE - INTERVAL '6 days'
+    GROUP BY appointment_date
+  ) c ON c.appointment_date = d.day::date;
+
+  RETURN jsonb_build_object(
+    'appointments_today', COALESCE(v_appointments_today, 0),
+    'active_patients', COALESCE(v_active_patients, 0),
+    'daily_income', COALESCE(v_daily_income, 0.00),
+    'status_breakdown', COALESCE(v_status_breakdown, '{}'::jsonb),
+    'weekly_activity', COALESCE(v_weekly_activity, '[]'::jsonb)
+  );
+END;
+$$;
+
+-- 6. Registrar Transacción Financiera / Pago
+CREATE OR REPLACE FUNCTION public.sp_record_payment(
+  p_patient_id BIGINT,
+  p_amount NUMERIC(10, 2),
+  p_concept VARCHAR(200),
+  p_payment_method VARCHAR(50) DEFAULT 'Cash',
+  p_appointment_id BIGINT DEFAULT NULL,
+  p_notes TEXT DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_transaction_id BIGINT;
+BEGIN
+  INSERT INTO public.financial_transactions (
+    patient_id, appointment_id, concept, amount, payment_method, status, transaction_date, notes
+  ) VALUES (
+    p_patient_id, p_appointment_id, p_concept, p_amount, p_payment_method, 'Paid', CURRENT_TIMESTAMP, p_notes
+  ) RETURNING id INTO v_transaction_id;
+
+  RETURN jsonb_build_object(
+    'success', TRUE,
+    'transaction_id', v_transaction_id,
+    'message', 'Transacción financiera registrada correctamente'
+  );
+EXCEPTION WHEN OTHERS THEN
+  RETURN jsonb_build_object(
+    'success', FALSE,
+    'error', SQLERRM
+  );
+END;
+$$;
+
+-- 7. Permisos de Ejecución (GRANTS)
+GRANT EXECUTE ON FUNCTION public.sp_register_patient_with_contact TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.sp_book_appointment TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.sp_save_consultation_with_vitals TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.sp_create_prescription_with_items TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.sp_get_dashboard_analytics TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.sp_record_payment TO anon, authenticated, service_role;

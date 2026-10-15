@@ -4,6 +4,9 @@ class User {
   final int? id;
   final String fullName;
   final String email;
+  final String? phone;
+  final String? specialty;
+  final String? licenseNumber;
   final String? providerId;
   final String? passwordHash;
   final int roleId;
@@ -17,6 +20,9 @@ class User {
     this.id,
     required this.fullName,
     required this.email,
+    this.phone,
+    this.specialty,
+    this.licenseNumber,
     this.providerId,
     this.passwordHash,
     required this.roleId,
@@ -32,6 +38,9 @@ class User {
       'id': id,
       'full_name': fullName,
       'email': email,
+      'phone': phone,
+      'specialty': specialty,
+      'license_number': licenseNumber,
       'provider_id': providerId,
       'password_hash': passwordHash,
       'role_id': roleId,
@@ -46,16 +55,19 @@ class User {
   factory User.fromMap(Map<String, dynamic> map) {
     return User(
       id: map['id'] as int?,
-      fullName: map['full_name'] as String,
-      email: map['email'] as String,
+      fullName: (map['full_name'] as String?) ?? 'Usuario',
+      email: (map['email'] as String?) ?? '',
+      phone: map['phone'] as String?,
+      specialty: map['specialty'] as String?,
+      licenseNumber: (map['license_number'] as String?) ?? (map['provider_id'] as String?),
       providerId: map['provider_id'] as String?,
       passwordHash: map['password_hash'] as String?,
-      roleId: map['role_id'] as int,
+      roleId: (map['role_id'] as num?)?.toInt() ?? 2,
       roleName: map['role_name'] as String?,
       isActive: map['is_active'] == 1 || map['is_active'] == true,
-      lastLogin: map['last_login'] != null ? DateTime.parse(map['last_login']) : null,
-      createdAt: map['created_at'] != null ? DateTime.parse(map['created_at']) : null,
-      updatedAt: map['updated_at'] != null ? DateTime.parse(map['updated_at']) : null,
+      lastLogin: map['last_login'] != null ? DateTime.tryParse(map['last_login'].toString()) : null,
+      createdAt: map['created_at'] != null ? DateTime.tryParse(map['created_at'].toString()) : null,
+      updatedAt: map['updated_at'] != null ? DateTime.tryParse(map['updated_at'].toString()) : null,
     );
   }
 
@@ -64,17 +76,23 @@ class User {
   factory User.fromJson(String source) => User.fromMap(json.decode(source));
 
   String get initials {
-    final parts = fullName.split(' ');
+    final parts = fullName.trim().split(RegExp(r'\s+'));
     if (parts.length >= 2) {
       return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
     }
-    return fullName.substring(0, 2).toUpperCase();
+    if (fullName.trim().isNotEmpty) {
+      return fullName.trim().substring(0, fullName.trim().length >= 2 ? 2 : 1).toUpperCase();
+    }
+    return 'DR';
   }
 
   User copyWith({
     int? id,
     String? fullName,
     String? email,
+    String? phone,
+    String? specialty,
+    String? licenseNumber,
     String? providerId,
     String? passwordHash,
     int? roleId,
@@ -88,6 +106,9 @@ class User {
       id: id ?? this.id,
       fullName: fullName ?? this.fullName,
       email: email ?? this.email,
+      phone: phone ?? this.phone,
+      specialty: specialty ?? this.specialty,
+      licenseNumber: licenseNumber ?? this.licenseNumber,
       providerId: providerId ?? this.providerId,
       passwordHash: passwordHash ?? this.passwordHash,
       roleId: roleId ?? this.roleId,

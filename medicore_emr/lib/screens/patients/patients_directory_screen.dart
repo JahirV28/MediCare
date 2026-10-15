@@ -121,8 +121,11 @@ class _PatientsDirectoryScreenState extends State<PatientsDirectoryScreen> {
                             borderSide: const BorderSide(color: AppColors.border),
                           ),
                         ),
+                        onChanged: (value) {
+                          provider.loadPatients(search: value, statusFilter: _statusFilter);
+                        },
                         onSubmitted: (value) {
-                          provider.loadPatients(search: value);
+                          provider.loadPatients(search: value, statusFilter: _statusFilter);
                         },
                       ),
                     ),
@@ -147,7 +150,12 @@ class _PatientsDirectoryScreenState extends State<PatientsDirectoryScreen> {
                           DropdownMenuItem(value: 'Activo', child: Text('Activo')),
                           DropdownMenuItem(value: 'Inactivo', child: Text('Inactivo')),
                         ],
-                        onChanged: (v) => setState(() => _statusFilter = v!),
+                        onChanged: (v) {
+                          if (v != null) {
+                            setState(() => _statusFilter = v);
+                            provider.loadPatients(search: _searchController.text, statusFilter: v);
+                          }
+                        },
                       ),
                     ),
                     const SizedBox(width: 12),

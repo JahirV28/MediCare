@@ -39,6 +39,7 @@ class _NewConsultationScreenState extends State<NewConsultationScreen> {
       await provider.loadConsultation(
         patient?.fullName ?? 'Paciente General',
         patient?.patientCode ?? 'PT-001',
+        patientId: patient?.id,
       );
       if (!mounted) return;
       final c = provider.currentConsultation;
@@ -72,6 +73,11 @@ class _NewConsultationScreenState extends State<NewConsultationScreen> {
     _weightController.dispose();
     _heightController.dispose();
     super.dispose();
+  }
+
+  String _formatDate(DateTime date) {
+    const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
 
   double _calculateBmi() {
@@ -120,12 +126,20 @@ class _NewConsultationScreenState extends State<NewConsultationScreen> {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        'Fecha: Oct 24, 2023 | Paciente: Juan Perez (ID: 987654)',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: AppColors.textSecondary,
-                        ),
+                      Consumer<PatientProvider>(
+                        builder: (context, patProvider, _) {
+                          final p = patProvider.selectedPatient;
+                          final name = p?.fullName ?? 'Paciente General';
+                          final code = p?.patientCode ?? '-';
+                          final dateStr = _formatDate(DateTime.now());
+                          return Text(
+                            'Fecha: $dateStr | Paciente: $name (ID: $code)',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: AppColors.textSecondary,
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -496,6 +510,7 @@ class _NewConsultationScreenState extends State<NewConsultationScreen> {
   }
 
   void _handleSave({required bool isFinalized}) async {
+    final patient = context.read<PatientProvider>().selectedPatient;
     final provider = context.read<ConsultationProvider>();
     provider.updateVitals(
       bpSystolic: int.tryParse(_bpSysController.text) ?? 120,
@@ -513,17 +528,28 @@ class _NewConsultationScreenState extends State<NewConsultationScreen> {
       assessment: _assessmentController.text,
       plan: _planController.text,
       isFinalized: isFinalized,
+      patientId: patient?.id,
+      patientName: patient?.fullName,
+      patientCode: patient?.patientCode,
     );
 
     if (success && mounted) {
       if (isFinalized) {
-        await context.read<DashboardProvider>().recordIncome(100.0);
+        await context.read<DashboardProvider>().recordIncome(
+          100.0,
+          patientId: patient?.id,
+          concept: 'Consulta SOAP: ${patient?.fullName ?? "Paciente"}',
+        );
       }
+      if (!mounted) return;
+      // Actualizar detalle de paciente en vivo para que su línea de tiempo muestre la consulta
+      await context.read<PatientProvider>().loadPatientDetail();
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(isFinalized
-                ? 'Consulta firmada y finalizada con éxito. Se registró el ingreso de \$100.'
+                ? 'Consulta firmada y finalizada con éxito. Registrada en el expediente.'
                 : 'Borrador guardado exitosamente.'),
             backgroundColor: AppColors.success,
             behavior: SnackBarBehavior.floating,

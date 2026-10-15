@@ -3,10 +3,10 @@ import '../models/patient.dart';
 import '../models/clinical_record.dart';
 import '../models/allergy_alert.dart';
 import '../models/emergency_contact.dart';
-import '../services/mock_api_service.dart';
+import '../services/supabase_service.dart';
 
 class PatientProvider extends ChangeNotifier {
-  final MockApiService _api = MockApiService();
+  final SupabaseService _api = SupabaseService();
 
   bool _isLoading = false;
   List<Patient> _patients = [];
@@ -17,6 +17,7 @@ class PatientProvider extends ChangeNotifier {
   int _totalPatients = 0;
   int _currentPage = 1;
   String _searchQuery = '';
+  String _statusFilter = 'Todos';
 
   bool get isLoading => _isLoading;
   List<Patient> get patients => _patients;
@@ -27,16 +28,25 @@ class PatientProvider extends ChangeNotifier {
   int get totalPatients => _totalPatients;
   int get currentPage => _currentPage;
   String get searchQuery => _searchQuery;
+  String get statusFilter => _statusFilter;
 
-  Future<void> loadPatients({String? search}) async {
+  Future<void> loadPatients({String? search, String? statusFilter}) async {
     _isLoading = true;
-    _searchQuery = search ?? '';
+    if (search != null) _searchQuery = search;
+    if (statusFilter != null) _statusFilter = statusFilter;
     notifyListeners();
 
     try {
       final results = await Future.wait([
-        _api.getPatients(search: _searchQuery, page: _currentPage),
-        _api.getPatientsCount(search: _searchQuery),
+        _api.getPatients(
+          search: _searchQuery,
+          statusFilter: _statusFilter,
+          page: _currentPage,
+        ),
+        _api.getPatientsCount(
+          search: _searchQuery,
+          statusFilter: _statusFilter,
+        ),
       ]);
       _patients = results[0] as List<Patient>;
       _totalPatients = results[1] as int;
@@ -50,7 +60,7 @@ class PatientProvider extends ChangeNotifier {
 
   void setPage(int page) {
     _currentPage = page;
-    loadPatients(search: _searchQuery);
+    loadPatients(search: _searchQuery, statusFilter: _statusFilter);
   }
 
   Future<void> loadPatientDetail() async {
@@ -100,35 +110,48 @@ class PatientProvider extends ChangeNotifier {
   }
 
   Future<void> selectPatientById(int patientId, {String? patientName}) async {
+    await selectPatientByNameOrId(patientId: patientId, patientName: patientName);
+  }
+
+  Future<void> selectPatientByNameOrId({int? patientId, String? patientName}) async {
     _isLoading = true;
     notifyListeners();
 
     try {
-      final patient = await _api.getPatientByIdOrName(patientId, patientName);
-      if (patient != null) {
-        _selectedPatient = patient;
-        final results = await Future.wait([
-          _api.getClinicalRecords(patient.id ?? patientId),
-          _api.getAllergyAlerts(patient.id ?? patientId),
-          _api.getEmergencyContacts(patient.id ?? patientId),
-        ]);
-        _clinicalRecords = results[0] as List<ClinicalRecord>;
-        _allergyAlerts = results[1] as List<AllergyAlert>;
-        _emergencyContacts = results[2] as List<EmergencyContact>;
-      }
+      final patient = await _api.getPatientDetail(
+        patientId: patientId,
+        patientName: patientName,
+      );
+      _selectedPatient = patient;
+      final realId = patient.id ?? patientId ?? 1;
+      final results = await Future.wait([
+        _api.getClinicalRecords(realId),
+        _api.getAllergyAlerts(realId),
+        _api.getEmergencyContacts(realId),
+      ]);
+      _clinicalRecords = results[0] as List<ClinicalRecord>;
+      _allergyAlerts = results[1] as List<AllergyAlert>;
+      _emergencyContacts = results[2] as List<EmergencyContact>;
     } catch (_) {}
 
     _isLoading = false;
     notifyListeners();
   }
 
+  Future<List<Patient>> searchPatients(String query) async {
+    return _api.searchPatients(query);
+  }
+
   Future<bool> togglePatientStatus(int patientId) async {
-    final success = await _api.togglePatientActiveStatus(patientId);
+    final currentActive = _selectedPatient != null && _selectedPatient!.id == patientId
+        ? _selectedPatient!.isActive
+        : true;
+    final success = await _api.togglePatientActiveStatus(patientId, currentActive);
     if (success) {
       if (_selectedPatient != null && _selectedPatient!.id == patientId) {
-        _selectedPatient = _selectedPatient!.copyWith(isActive: !_selectedPatient!.isActive);
+        _selectedPatient = _selectedPatient!.copyWith(isActive: !currentActive);
       }
-      await loadPatients(search: _searchQuery);
+      await loadPatients(search: _searchQuery, statusFilter: _statusFilter);
     }
     return success;
   }

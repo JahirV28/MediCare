@@ -71,7 +71,19 @@ class _MainLayoutState extends State<MainLayout> {
           Expanded(
             child: Column(
               children: [
-                const TopBarWidget(),
+                TopBarWidget(
+                  showSearchBar: !_showSettings,
+                  onPatientSelected: (patient) {
+                    context.read<PatientProvider>().selectPatient(patient);
+                    if (mounted) {
+                      setState(() {
+                        _showSettings = false;
+                        _selectedIndex = 1;
+                        _currentSubRoute = 'detail';
+                      });
+                    }
+                  },
+                ),
                 Expanded(
                   child: _buildContent(),
                 ),
@@ -144,6 +156,18 @@ class _MainLayoutState extends State<MainLayout> {
       case 2:
         return CalendarScreen(
           onBack: () => setState(() => _selectedIndex = 0),
+          onNavigateToPatientDetail: (patientId, patientName) async {
+            await context.read<PatientProvider>().selectPatientByNameOrId(
+              patientId: patientId,
+              patientName: patientName,
+            );
+            if (mounted) {
+              setState(() {
+                _selectedIndex = 1;
+                _currentSubRoute = 'detail';
+              });
+            }
+          },
         );
       case 3:
         return OdontologyScreen(
