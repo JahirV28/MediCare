@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/backup_entry.dart';
 import '../core/utils/file_saver_helper.dart';
-import 'mock_api_service.dart';
 
 class BackupService {
   static final BackupService _instance = BackupService._internal();
@@ -11,7 +10,6 @@ class BackupService {
   BackupService._internal();
 
   SupabaseClient get _client => Supabase.instance.client;
-  final MockApiService _mockApi = MockApiService();
 
   static const List<String> supportedTables = [
     'patients',
@@ -60,16 +58,7 @@ class BackupService {
           (res as List).map((item) => Map<String, dynamic>.from(item as Map)),
         );
       } catch (e) {
-        debugPrint('Supabase select error on $tableName: $e. Fallback to mock data.');
-        rows = await _getMockTableData(tableName);
-      }
-
-      // If Supabase was empty for this table, also check if mock has useful seed data
-      if (rows.isEmpty) {
-        final fallbackRows = await _getMockTableData(tableName);
-        if (fallbackRows.isNotEmpty) {
-          rows = fallbackRows;
-        }
+        debugPrint('Supabase select error on $tableName: $e');
       }
 
       tablesData[tableName] = rows;
@@ -524,37 +513,7 @@ class BackupService {
     return null;
   }
 
-  Future<List<Map<String, dynamic>>> _getMockTableData(String table) async {
-    try {
-      switch (table) {
-        case 'patients':
-          final pts = await _mockApi.getPatients(search: '');
-          return pts.map((p) => p.toMap()).toList();
-        case 'appointments':
-          final apts = await _mockApi.getTodayAppointments();
-          return apts.map((a) => a.toMap()).toList();
-        case 'clinical_records':
-          final recs = await _mockApi.getClinicalRecords(1);
-          return recs.map((r) => r.toMap()).toList();
-        case 'allergy_alerts':
-          final alg = await _mockApi.getAllergyAlerts(1);
-          return alg.map((a) => a.toMap()).toList();
-        case 'emergency_contacts':
-          final ec = await _mockApi.getEmergencyContacts(1);
-          return ec.map((e) => e.toMap()).toList();
-        case 'diagnostic_files':
-          final df = await _mockApi.getDiagnosticFiles(1);
-          return df.map((d) => d.toMap()).toList();
-        case 'pediatric_growth_records':
-          final gr = await _mockApi.getPediatricGrowthHistory(1);
-          return gr.map((g) => g.toMap()).toList();
-        default:
-          return [];
-      }
-    } catch (_) {
-      return [];
-    }
-  }
+
 
   List<BackupEntry> _getDefaultBaselineBackups() {
     final now = DateTime.now();

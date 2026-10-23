@@ -3,11 +3,13 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/diagnostic_file.dart';
 import '../../providers/clinical_providers.dart';
+import '../../services/supabase_service.dart';
 
 class DiagnosticFilesScreen extends StatefulWidget {
   final VoidCallback? onBack;
+  final int? patientId;
 
-  const DiagnosticFilesScreen({super.key, this.onBack});
+  const DiagnosticFilesScreen({super.key, this.onBack, this.patientId});
 
   @override
   State<DiagnosticFilesScreen> createState() => _DiagnosticFilesScreenState();
@@ -20,8 +22,19 @@ class _DiagnosticFilesScreenState extends State<DiagnosticFilesScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<DiagnosticProvider>().loadFiles(84729);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      int pid = widget.patientId ?? 0;
+      if (pid <= 0) {
+        try {
+          final res = await SupabaseService().getPatients(perPage: 1);
+          if (res.isNotEmpty && res.first.id != null) {
+            pid = res.first.id!;
+          }
+        } catch (_) {}
+      }
+      if (mounted && pid > 0) {
+        context.read<DiagnosticProvider>().loadFiles(pid);
+      }
     });
   }
 
@@ -566,18 +579,20 @@ class _DiagnosticFilesScreenState extends State<DiagnosticFilesScreen> {
     }
   }
 
-  void _simulateUpload(DiagnosticProvider provider) {
+  void _simulateUpload(DiagnosticProvider provider) async {
+    final pid = provider.currentPatientId ?? widget.patientId ?? 1;
     final newFile = DiagnosticFile(
-      patientId: 84729,
+      patientId: pid,
       fileName: 'Electrocardiogram_ECG.pdf',
       category: 'Imaging',
       uploadDate: DateTime.now(),
-      uploadedBy: 'Dr. Smith',
+      uploadedBy: 'Dr. Kalej Vargas',
       fileUrl: 'https://example.com/files/ecg.pdf',
       fileSize: '3.2 MB',
       totalPages: 1,
     );
-    provider.uploadFile(newFile);
+    await provider.uploadFile(newFile, patientId: pid);
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Archivo subido con éxito.'),

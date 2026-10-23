@@ -478,6 +478,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     flex: 2,
                     child: ActivityChart(
                       data: dashboard.weeklyActivity,
+                      todayIndex: dashboard.todayIndex,
                     ),
                   ),
                 ],

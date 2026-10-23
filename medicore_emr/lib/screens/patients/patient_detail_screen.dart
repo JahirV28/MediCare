@@ -231,14 +231,18 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> with SingleTi
                                           children: [
                                             const Icon(Icons.folder_open, size: 48, color: AppColors.primaryBlue),
                                             const SizedBox(height: 12),
-                                            const Text(
-                                              '4 archivos diagnósticos disponibles',
-                                              style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                                            Text(
+                                              provider.diagnosticFiles.isEmpty
+                                                  ? 'Sin archivos diagnósticos registrados'
+                                                  : '${provider.diagnosticFiles.length} ${provider.diagnosticFiles.length == 1 ? "archivo diagnóstico disponible" : "archivos diagnósticos disponibles"}',
+                                              style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary),
                                             ),
                                             const SizedBox(height: 4),
-                                            const Text(
-                                              'Rayos X, Paneles Sanguíneos, Interconsultas y Dermatología',
-                                              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                                            Text(
+                                              provider.diagnosticFiles.isEmpty
+                                                  ? 'No se han adjuntado estudios ni archivos clínicos para este paciente.'
+                                                  : provider.diagnosticFiles.map((f) => f.category).toSet().join(', '),
+                                              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                                             ),
                                             const SizedBox(height: 16),
                                             ElevatedButton.icon(

@@ -199,14 +199,19 @@ class UpcomingPatientsTable extends StatelessWidget {
                         _showChangeStatusDialog(context, apt);
                         break;
                       case 'pay':
-                        onCollectPayment?.call(apt, 100.0);
+                        final cost = apt.serviceCost ?? 100.0;
+                        onCollectPayment?.call(apt, cost);
                         break;
                       case 'cancel':
                         onStatusChanged?.call(apt, 'Cancelado');
                         break;
                     }
                   },
-                  itemBuilder: (ctx) => [
+                  itemBuilder: (ctx) {
+                    final displayCost = apt.serviceCost != null
+                        ? '\$${apt.serviceCost!.toStringAsFixed(0)}'
+                        : '\$100';
+                    return [
                     const PopupMenuItem(
                       value: 'consultation',
                       child: Row(
@@ -237,13 +242,13 @@ class UpcomingPatientsTable extends StatelessWidget {
                         ],
                       ),
                     ),
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: 'pay',
                       child: Row(
                         children: [
-                          Icon(Icons.payments_outlined, size: 18, color: AppColors.success),
-                          SizedBox(width: 10),
-                          Text('Cobrar Consulta (\$100)', style: TextStyle(fontSize: 13)),
+                          const Icon(Icons.payments_outlined, size: 18, color: AppColors.success),
+                          const SizedBox(width: 10),
+                          Text('Cobrar Consulta ($displayCost)', style: const TextStyle(fontSize: 13)),
                         ],
                       ),
                     ),
@@ -258,8 +263,9 @@ class UpcomingPatientsTable extends StatelessWidget {
                         ],
                       ),
                     ),
-                  ],
-                ),
+                  ];
+                },
+              ),
               ),
             ),
           ],

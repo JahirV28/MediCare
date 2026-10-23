@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../services/pdf_export_service.dart';
+import '../../services/supabase_service.dart';
 import '../../widgets/common/breadcrumb.dart';
 
 class ReportsScreen extends StatefulWidget {
@@ -13,6 +14,7 @@ class ReportsScreen extends StatefulWidget {
 }
 
 class _ReportsScreenState extends State<ReportsScreen> {
+  final SupabaseService _api = SupabaseService();
   String? _selectedReport;
   bool _isGenerating = false;
   bool _reportGenerated = false;
@@ -57,19 +59,52 @@ class _ReportsScreenState extends State<ReportsScreen> {
     ),
   ];
 
-  // Mock report data
-  final List<_ReportRow> _mockReportData = [
-    _ReportRow(id: '001', col1: '02 Ago 2026', col2: 'Ana García', col3: 'Consulta General', col4: '\$850'),
-    _ReportRow(id: '002', col1: '03 Ago 2026', col2: 'Carlos López', col3: 'Control', col4: '\$500'),
-    _ReportRow(id: '003', col1: '05 Ago 2026', col2: 'María Rodríguez', col3: 'Odontología', col4: '\$1,200'),
-    _ReportRow(id: '004', col1: '07 Ago 2026', col2: 'Juan Perez', col3: 'Radiografía', col4: '\$600'),
-    _ReportRow(id: '005', col1: '08 Ago 2026', col2: 'Laura Sánchez', col3: 'Pediatría', col4: '\$750'),
-    _ReportRow(id: '006', col1: '10 Ago 2026', col2: 'Pedro Martínez', col3: 'Extracción', col4: '\$1,500'),
-    _ReportRow(id: '007', col1: '12 Ago 2026', col2: 'Miguel Torres', col3: 'Laboratorio', col4: '\$2,300'),
-    _ReportRow(id: '008', col1: '14 Ago 2026', col2: 'Sofía Herrera', col3: 'Consulta General', col4: '\$850'),
-    _ReportRow(id: '009', col1: '15 Ago 2026', col2: 'Diego Ruiz', col3: 'Ortodoncia', col4: '\$3,500'),
-    _ReportRow(id: '010', col1: '18 Ago 2026', col2: 'Valentina Díaz', col3: 'Control', col4: '\$500'),
-  ];
+  List<String> _reportHeaders = [];
+  List<List<String>> _reportRows = [];
+  double? _reportTotal;
+  int _recordCount = 0;
+
+  Future<void> _loadReport() async {
+    if (_selectedReport == null) return;
+    setState(() {
+      _isGenerating = true;
+      _reportGenerated = false;
+    });
+
+    final now = DateTime.now();
+    final start = _dateRange?.start ?? DateTime(now.year, now.month, 1);
+    final end = _dateRange?.end ?? now;
+
+    try {
+      final res = await _api.generateReportData(
+        reportTitle: _selectedReport!,
+        startDate: start,
+        endDate: end,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _reportHeaders = List<String>.from(res['headers'] ?? []);
+        _reportRows = (res['rows'] as List? ?? [])
+            .map((r) => (r as List).map((c) => c?.toString() ?? '').toList())
+            .toList();
+        _reportTotal = (res['total'] as num?)?.toDouble();
+        _recordCount = (res['count'] as num?)?.toInt() ?? _reportRows.length;
+        _isGenerating = false;
+        _reportGenerated = true;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _reportHeaders = ['#', 'Fecha', 'Paciente', 'Detalle', 'Estado'];
+        _reportRows = [];
+        _reportTotal = null;
+        _recordCount = 0;
+        _isGenerating = false;
+        _reportGenerated = true;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -112,6 +147,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   );
                   if (range != null) {
                     setState(() => _dateRange = range);
+                    if (_selectedReport != null) {
+                      _loadReport();
+                    }
                   }
                 },
                 icon: const Icon(Icons.date_range_outlined, size: 18),
@@ -148,16 +186,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
           onTap: () async {
             setState(() {
               _selectedReport = t.title;
-              _isGenerating = true;
-              _reportGenerated = false;
             });
-            // Simulate report generation
-            await Future.delayed(const Duration(milliseconds: 800));
-            if (!mounted) return;
-            setState(() {
-              _isGenerating = false;
-              _reportGenerated = true;
-            });
+            await _loadReport();
           },
           borderRadius: BorderRadius.circular(12),
           child: AnimatedContainer(
@@ -238,6 +268,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   Widget _buildGeneratedReport() {
+    final rangeText = _dateRange != null
+        ? '${_dateRange!.start.day}/${_dateRange!.start.month}/${_dateRange!.start.year} - ${_dateRange!.end.day}/${_dateRange!.end.month}/${_dateRange!.end.year}'
+        : 'Mes Actual';
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -266,7 +300,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '${_mockReportData.length} registros encontrados | Generado: ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
+                    '$_recordCount registros encontrados${_reportTotal != null ? ' | Total: \$${_reportTotal!.toStringAsFixed(2)}' : ''} | Generado: ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
                     style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                   ),
                 ],
@@ -274,40 +308,34 @@ class _ReportsScreenState extends State<ReportsScreen> {
               Row(
                 children: [
                   OutlinedButton.icon(
-                    onPressed: () async {
-                      final rangeText = _dateRange != null
-                          ? '${_dateRange!.start.day}/${_dateRange!.start.month}/${_dateRange!.start.year} - ${_dateRange!.end.day}/${_dateRange!.end.month}/${_dateRange!.end.year}'
-                          : 'Mes Actual';
-                      await PdfExportService.exportReportPdf(
-                        context: context,
-                        reportTitle: 'Reporte: $_selectedReport',
-                        dateRangeText: rangeText,
-                        headers: [
-                          ['#', 'Fecha', 'Paciente', 'Concepto', 'Monto']
-                        ],
-                        rows: _mockReportData.map((r) => [r.id, r.col1, r.col2, r.col3, r.col4]).toList(),
-                      );
-                    },
+                    onPressed: _reportRows.isEmpty
+                        ? null
+                        : () async {
+                            await PdfExportService.exportReportPdf(
+                              context: context,
+                              reportTitle: 'Reporte: $_selectedReport',
+                              dateRangeText: rangeText,
+                              headers: [_reportHeaders],
+                              rows: _reportRows,
+                            );
+                          },
                     icon: const Icon(Icons.print_outlined, size: 16),
                     label: const Text('Imprimir', style: TextStyle(fontSize: 12)),
                     style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10)),
                   ),
                   const SizedBox(width: 8),
                   ElevatedButton.icon(
-                    onPressed: () async {
-                      final rangeText = _dateRange != null
-                          ? '${_dateRange!.start.day}/${_dateRange!.start.month}/${_dateRange!.start.year} - ${_dateRange!.end.day}/${_dateRange!.end.month}/${_dateRange!.end.year}'
-                          : 'Mes Actual';
-                      await PdfExportService.exportReportPdf(
-                        context: context,
-                        reportTitle: 'Reporte: $_selectedReport',
-                        dateRangeText: rangeText,
-                        headers: [
-                          ['#', 'Fecha', 'Paciente', 'Concepto', 'Monto']
-                        ],
-                        rows: _mockReportData.map((r) => [r.id, r.col1, r.col2, r.col3, r.col4]).toList(),
-                      );
-                    },
+                    onPressed: _reportRows.isEmpty
+                        ? null
+                        : () async {
+                            await PdfExportService.exportReportPdf(
+                              context: context,
+                              reportTitle: 'Reporte: $_selectedReport',
+                              dateRangeText: rangeText,
+                              headers: [_reportHeaders],
+                              rows: _reportRows,
+                            );
+                          },
                     icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
                     label: const Text('Exportar PDF', style: TextStyle(fontSize: 12)),
                     style: ElevatedButton.styleFrom(
@@ -323,34 +351,68 @@ class _ReportsScreenState extends State<ReportsScreen> {
           const Divider(),
           const SizedBox(height: 8),
 
-          // Table header
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-            decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(6)),
-            child: const Row(
-              children: [
-                Expanded(flex: 1, child: Text('#', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary))),
-                Expanded(flex: 2, child: Text('Fecha', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary))),
-                Expanded(flex: 3, child: Text('Paciente', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary))),
-                Expanded(flex: 3, child: Text('Concepto', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary))),
-                Expanded(flex: 2, child: Text('Monto', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary))),
-              ],
+          if (_reportHeaders.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+              decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(6)),
+              child: Row(
+                children: _reportHeaders.asMap().entries.map((entry) {
+                  final idx = entry.key;
+                  final title = entry.value;
+                  final flex = idx == 0 ? 1 : (idx == 1 ? 2 : (idx == 2 ? 3 : 2));
+                  return Expanded(
+                    flex: flex,
+                    child: Text(
+                      title,
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+                    ),
+                  );
+                }).toList(),
+              ),
             ),
-          ),
 
-          ..._mockReportData.map((r) => Container(
-                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.borderLight))),
-                child: Row(
-                  children: [
-                    Expanded(flex: 1, child: Text(r.id, style: const TextStyle(fontSize: 12, color: AppColors.textHint))),
-                    Expanded(flex: 2, child: Text(r.col1, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary))),
-                    Expanded(flex: 3, child: Text(r.col2, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary))),
-                    Expanded(flex: 3, child: Text(r.col3, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary))),
-                    Expanded(flex: 2, child: Text(r.col4, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary))),
-                  ],
-                ),
-              )),
+          if (_reportRows.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 36),
+              alignment: Alignment.center,
+              child: Column(
+                children: [
+                  Icon(Icons.inbox_outlined, size: 36, color: AppColors.textHint),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'No se encontraron registros en el período seleccionado.',
+                    style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            )
+          else
+            ..._reportRows.map((row) => Container(
+                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                  decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.borderLight))),
+                  child: Row(
+                    children: row.asMap().entries.map((entry) {
+                      final idx = entry.key;
+                      final cell = entry.value;
+                      final flex = idx == 0 ? 1 : (idx == 1 ? 2 : (idx == 2 ? 3 : 2));
+                      final isBold = idx == 2 || (idx == row.length - 1 && cell.startsWith('\$'));
+                      return Expanded(
+                        flex: flex,
+                        child: Text(
+                          cell,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: isBold ? FontWeight.w600 : FontWeight.normal,
+                            color: idx == 0
+                                ? AppColors.textHint
+                                : (isBold ? AppColors.textPrimary : AppColors.textSecondary),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                )),
         ],
       ),
     );
@@ -368,21 +430,5 @@ class _ReportTemplate {
     required this.title,
     required this.description,
     required this.color,
-  });
-}
-
-class _ReportRow {
-  final String id;
-  final String col1;
-  final String col2;
-  final String col3;
-  final String col4;
-
-  const _ReportRow({
-    required this.id,
-    required this.col1,
-    required this.col2,
-    required this.col3,
-    required this.col4,
   });
 }

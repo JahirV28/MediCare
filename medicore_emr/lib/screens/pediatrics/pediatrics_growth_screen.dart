@@ -4,12 +4,14 @@ import '../../core/constants/app_colors.dart';
 import '../../models/growth_record.dart';
 import '../../providers/clinical_providers.dart';
 import '../../services/pdf_export_service.dart';
+import '../../services/supabase_service.dart';
 import '../../widgets/common/breadcrumb.dart';
 
 class PediatricsGrowthScreen extends StatefulWidget {
   final VoidCallback? onBack;
+  final int? patientId;
 
-  const PediatricsGrowthScreen({super.key, this.onBack});
+  const PediatricsGrowthScreen({super.key, this.onBack, this.patientId});
 
   @override
   State<PediatricsGrowthScreen> createState() => _PediatricsGrowthScreenState();
@@ -25,8 +27,19 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<PediatricsProvider>().loadGrowthData(8472);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      int pid = widget.patientId ?? 0;
+      if (pid <= 0) {
+        try {
+          final res = await SupabaseService().getPatients(perPage: 1);
+          if (res.isNotEmpty && res.first.id != null) {
+            pid = res.first.id!;
+          }
+        } catch (_) {}
+      }
+      if (mounted && pid > 0) {
+        context.read<PediatricsProvider>().loadGrowthData(pid);
+      }
     });
   }
 
@@ -534,7 +547,7 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
                 ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryBlue),
-                  onPressed: () {
+                  onPressed: () async {
                     final weight = double.tryParse(weightController.text) ?? 14.0;
                     final height = double.tryParse(heightController.text) ?? 92.0;
                     final head = double.tryParse(headController.text) ?? 49.0;
@@ -551,9 +564,10 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
                     if (height >= 95.0) hPerc = 75;
                     if (height <= 85.0) hPerc = 25;
 
+                    final pid = provider.currentPatientId ?? widget.patientId ?? 1;
                     final newRecord = GrowthRecord(
                       id: DateTime.now().millisecondsSinceEpoch,
-                      patientId: 8472,
+                      patientId: pid,
                       date: selectedDate,
                       ageLabel: ageLabelController.text.isNotEmpty ? ageLabelController.text : '${months.toInt()}m',
                       ageMonths: months,
@@ -564,10 +578,12 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
                       headCircumferenceCm: head,
                     );
 
-                    provider.addRecord(newRecord);
-                    Navigator.of(dialogCtx).pop();
+                    final messenger = ScaffoldMessenger.of(context);
+                    final nav = Navigator.of(dialogCtx);
+                    await provider.addRecord(newRecord, patientId: pid);
+                    nav.pop();
 
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    messenger.showSnackBar(
                       const SnackBar(
                         content: Text('Nueva medición antropométrica registrada correctamente.'),
                         backgroundColor: AppColors.success,

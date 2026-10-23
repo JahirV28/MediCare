@@ -3,13 +3,15 @@ import '../../core/constants/app_colors.dart';
 
 class ActivityChart extends StatelessWidget {
   final List<double> data;
+  final int? todayIndex;
 
-  const ActivityChart({super.key, required this.data});
+  const ActivityChart({super.key, required this.data, this.todayIndex});
 
   @override
   Widget build(BuildContext context) {
     final maxVal = data.isEmpty ? 1.0 : data.reduce((a, b) => a > b ? a : b);
     const days = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    final activeIndex = todayIndex ?? (DateTime.now().weekday - 1).clamp(0, days.length - 1);
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -57,7 +59,7 @@ class ActivityChart extends StatelessWidget {
                             width: double.infinity,
                             height: maxVal > 0 ? (data[i] / maxVal) * 120 : 0,
                             decoration: BoxDecoration(
-                              color: i == data.length - 2
+                              color: i == activeIndex
                                   ? AppColors.primaryBlue
                                   : AppColors.chartBarLight,
                               borderRadius: BorderRadius.circular(4),

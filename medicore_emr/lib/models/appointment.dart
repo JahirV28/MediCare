@@ -13,6 +13,7 @@ class Appointment {
   final String? patientName;
   final String? doctorName;
   final String? serviceName;
+  final double? serviceCost;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -28,6 +29,7 @@ class Appointment {
     this.patientName,
     this.doctorName,
     this.serviceName,
+    this.serviceCost,
     this.createdAt,
     this.updatedAt,
   });
@@ -45,12 +47,20 @@ class Appointment {
       'patient_name': patientName,
       'doctor_name': doctorName,
       'service_name': serviceName,
+      'service_cost': serviceCost,
       'created_at': createdAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
     };
   }
 
   factory Appointment.fromMap(Map<String, dynamic> map) {
+    double? cost;
+    if (map['services'] != null && map['services'] is Map) {
+      cost = (map['services']['base_cost'] as num?)?.toDouble();
+    } else if (map['service_cost'] != null) {
+      cost = (map['service_cost'] as num?)?.toDouble();
+    }
+
     return Appointment(
       id: map['id'] as int?,
       patientId: map['patient_id'] as int,
@@ -63,6 +73,7 @@ class Appointment {
       patientName: map['patient_name'] as String?,
       doctorName: map['doctor_name'] as String?,
       serviceName: map['service_name'] as String?,
+      serviceCost: cost,
       createdAt: map['created_at'] != null ? DateTime.parse(map['created_at']) : null,
       updatedAt: map['updated_at'] != null ? DateTime.parse(map['updated_at']) : null,
     );

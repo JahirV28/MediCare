@@ -156,8 +156,10 @@ class DiagnosticProvider extends ChangeNotifier {
   List<DiagnosticFile> _files = [];
   DiagnosticFile? _selectedFile;
   String _selectedCategory = 'All Categories';
+  int? _currentPatientId;
 
   bool get isLoading => _isLoading;
+  int? get currentPatientId => _currentPatientId;
   List<DiagnosticFile> get files {
     if (_selectedCategory == 'All Categories') return _files;
     return _files.where((f) => f.category == _selectedCategory).toList();
@@ -168,6 +170,7 @@ class DiagnosticProvider extends ChangeNotifier {
 
   Future<void> loadFiles(int patientId) async {
     _isLoading = true;
+    _currentPatientId = patientId;
     notifyListeners();
 
     _files = await _api.getDiagnosticFiles(patientId);
@@ -191,10 +194,25 @@ class DiagnosticProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void uploadFile(DiagnosticFile file) {
+  Future<bool> uploadFile(DiagnosticFile file, {int? patientId}) async {
     _files.insert(0, file);
     _selectedFile = file;
     notifyListeners();
+
+    final targetPatientId = patientId ?? _currentPatientId ?? file.patientId;
+    if (targetPatientId > 0) {
+      final ok = await _api.uploadDiagnosticFile(
+        patientId: targetPatientId,
+        fileName: file.fileName,
+        category: file.category,
+        fileUrl: file.fileUrl,
+        fileSize: file.fileSize,
+        totalPages: file.totalPages,
+        mimeType: file.mimeType,
+      );
+      return ok;
+    }
+    return true;
   }
 }
 
@@ -443,13 +461,16 @@ class PediatricsProvider extends ChangeNotifier {
   bool _isLoading = false;
   List<GrowthRecord> _records = [];
   String _selectedMetric = 'Peso para la edad (0-5 años)';
+  int? _currentPatientId;
 
   bool get isLoading => _isLoading;
   List<GrowthRecord> get records => _records;
   String get selectedMetric => _selectedMetric;
+  int? get currentPatientId => _currentPatientId;
 
   Future<void> loadGrowthData(int patientId) async {
     _isLoading = true;
+    _currentPatientId = patientId;
     notifyListeners();
 
     _records = await _api.getPediatricGrowthHistory(patientId);
@@ -463,10 +484,28 @@ class PediatricsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addRecord(GrowthRecord record) {
+  Future<bool> addRecord(GrowthRecord record, {int? patientId}) async {
     _records.insert(0, record);
     // Ordenar de más reciente a más antiguo
     _records.sort((a, b) => b.date.compareTo(a.date));
     notifyListeners();
+
+    final targetPatientId = patientId ?? _currentPatientId;
+    if (targetPatientId != null && targetPatientId > 0) {
+      final ok = await _api.savePediatricGrowthRecord(
+        patientId: targetPatientId,
+        date: record.date,
+        ageLabel: record.ageLabel,
+        ageMonths: record.ageMonths,
+        weightKg: record.weightKg,
+        heightCm: record.heightCm,
+        headCircumferenceCm: record.headCircumferenceCm,
+        weightPercentile: record.weightPercentile,
+        heightPercentile: record.heightPercentile,
+        notes: null,
+      );
+      return ok;
+    }
+    return true;
   }
 }

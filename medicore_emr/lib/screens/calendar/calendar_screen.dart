@@ -36,7 +36,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final now = DateTime.now();
     _currentMonth = DateTime(now.year, now.month, 1);
     _selectedDate = now;
-    _generateMockAppointments();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadMonthAppointments();
     });
@@ -48,54 +47,25 @@ class _CalendarScreenState extends State<CalendarScreen> {
         _currentMonth.year,
         _currentMonth.month,
       );
-      if (supaAppointments.isNotEmpty && mounted) {
+      if (mounted) {
         setState(() {
+          _appointments.clear();
           supaAppointments.forEach((key, list) {
             _appointments[key] = list.map((item) => _AppointmentData(
               patientId: item['patient_id'] as int?,
               time: item['time'] ?? '09:00',
               patient: item['patient'] ?? 'Paciente',
               service: item['service'] ?? 'Consulta General',
-              status: item['status'] ?? 'Confirmada',
+              status: item['status'] ?? 'Confirmado',
             )).toList();
           });
         });
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Error cargando citas del mes: $e');
+    }
   }
 
-  void _generateMockAppointments() {
-    final now = DateTime.now();
-    final baseDate = DateTime(now.year, now.month, now.day);
-
-    _addAppointment(baseDate, '08:00', 'Ana García López', 'Consulta General', 'Confirmada', patientId: 6);
-    _addAppointment(baseDate, '08:30', 'Carlos Ruiz Torres', 'Control', 'Confirmada', patientId: 2);
-    _addAppointment(baseDate, '09:00', 'Laura Gómez Pérez', 'Odontología', 'Pendiente', patientId: 3);
-    _addAppointment(baseDate, '10:00', 'Juan Carlos Mendoza', 'Seguimiento', 'Confirmada', patientId: 5);
-    _addAppointment(baseDate, '11:30', 'Mateo Garcia', 'Pediatría', 'Pendiente', patientId: 8);
-    _addAppointment(baseDate, '14:00', 'Ana Martínez Silva', 'Consulta General', 'Confirmada', patientId: 1);
-    _addAppointment(baseDate, '15:00', 'Sarah Jenkins', 'Laboratorio', 'Cancelada', patientId: 7);
-    _addAppointment(baseDate, '16:30', 'Miguel Vargas López', 'Urgencia', 'Confirmada', patientId: 4);
-
-    _addAppointment(baseDate.add(const Duration(days: 1)), '09:00', 'Ana García López', 'Consulta General', 'Pendiente', patientId: 6);
-    _addAppointment(baseDate.add(const Duration(days: 1)), '10:30', 'Carlos Ruiz Torres', 'Control', 'Confirmada', patientId: 2);
-    _addAppointment(baseDate.add(const Duration(days: 1)), '13:00', 'Mateo Garcia', 'Pediatría', 'Confirmada', patientId: 8);
-
-    _addAppointment(baseDate.add(const Duration(days: 2)), '08:30', 'John Doe', 'Odontología', 'Confirmada', patientId: 9);
-    _addAppointment(baseDate.add(const Duration(days: 2)), '11:00', 'Hernaldo Noel Sevilla Cajina', 'Consulta General', 'Pendiente', patientId: 10);
-  }
-
-  void _addAppointment(DateTime date, String time, String patient, String service, String status, {int? patientId}) {
-    final key = '${date.year}-${date.month}-${date.day}';
-    _appointments.putIfAbsent(key, () => []);
-    _appointments[key]!.add(_AppointmentData(
-      patientId: patientId,
-      time: time,
-      patient: patient,
-      service: service,
-      status: status,
-    ));
-  }
 
   List<_AppointmentData> _getAppointmentsForDate(DateTime date) {
     final key = '${date.year}-${date.month}-${date.day}';
@@ -795,32 +765,37 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 final pId = selectedPatient!.id ?? 1;
                 final sName = serviceCtrl.text.trim();
 
-                setState(() {
-                  _selectedDate = dialogDate;
-                  _addAppointment(
-                    dialogDate,
-                    selectedTime,
-                    pName,
-                    sName,
-                    'Pendiente',
-                    patientId: pId,
-                  );
-                });
-
                 final dashboard = context.read<DashboardProvider>();
                 final messenger = ScaffoldMessenger.of(context);
 
                 final apt = Appointment(
                   patientId: pId,
-                  doctorId: 1,
+                  doctorId: _api.currentUserId ?? 9,
                   serviceId: 1,
                   appointmentDate: dialogDate,
                   appointmentTime: selectedTime,
-                  status: 'Pendiente',
+                  status: 'En Espera',
                   patientName: pName,
                   serviceName: sName,
                 );
-                await _api.addAppointment(apt);
+
+                final success = await _api.addAppointment(apt);
+                if (!success) {
+                  if (mounted) {
+                    messenger.showSnackBar(
+                      const SnackBar(
+                        content: Text('No se pudo agendar la cita. Verifique que no exista colisión de horario.'),
+                        backgroundColor: AppColors.danger,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                  return;
+                }
+
+                setState(() {
+                  _selectedDate = dialogDate;
+                });
 
                 final now = DateTime.now();
                 if (_isSameDay(dialogDate, now)) {

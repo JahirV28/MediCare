@@ -33,10 +33,12 @@ class _TopBarWidgetState extends State<TopBarWidget> {
   Timer? _debounceTimer;
   List<Patient> _searchResults = [];
   bool _isSearching = false;
+  List<Map<String, dynamic>> _notifications = [];
 
   @override
   void initState() {
     super.initState();
+    _loadNotifications();
     _focusNode.addListener(() {
       if (_focusNode.hasFocus && _searchController.text.trim().isNotEmpty) {
         _search(_searchController.text.trim());
@@ -49,6 +51,200 @@ class _TopBarWidgetState extends State<TopBarWidget> {
         });
       }
     });
+  }
+
+  Future<void> _loadNotifications() async {
+    try {
+      final notifs = await _api.getNotifications();
+      if (mounted) {
+        setState(() => _notifications = notifs);
+      }
+    } catch (_) {}
+  }
+
+  void _showNotificationsDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+        actionsPadding: const EdgeInsets.all(12),
+        title: Row(
+          children: [
+            const Icon(Icons.notifications_active_outlined, color: AppColors.primaryBlue, size: 22),
+            const SizedBox(width: 10),
+            const Text('Notificaciones Clínicas', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            const Spacer(),
+            IconButton(
+              icon: const Icon(Icons.refresh, size: 18, color: AppColors.textSecondary),
+              tooltip: 'Actualizar',
+              onPressed: () async {
+                Navigator.pop(ctx);
+                await _loadNotifications();
+                if (mounted) _showNotificationsDialog();
+              },
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 440,
+          child: _notifications.isEmpty
+              ? const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 28),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.check_circle_outline, size: 40, color: AppColors.success),
+                      SizedBox(height: 10),
+                      Text(
+                        'Todo al día. No hay alertas ni tareas pendientes.',
+                        style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: _notifications.length,
+                  separatorBuilder: (_, index) => const Divider(height: 1),
+                  itemBuilder: (_, index) {
+                    final n = _notifications[index];
+                    final severity = n['severity']?.toString() ?? 'info';
+                    Color color = AppColors.primaryBlue;
+                    IconData icon = Icons.info_outline;
+                    if (severity == 'danger') {
+                      color = AppColors.danger;
+                      icon = Icons.warning_amber_rounded;
+                    } else if (severity == 'warning') {
+                      color = AppColors.warning;
+                      icon = Icons.priority_high_rounded;
+                    }
+
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: color.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(icon, color: color, size: 18),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  n['title']?.toString() ?? 'Notificación',
+                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  n['message']?.toString() ?? '',
+                                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.3),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showSupportDialog() async {
+    final settings = await _api.getClinicSettings();
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+        actionsPadding: const EdgeInsets.all(12),
+        title: const Row(
+          children: [
+            Icon(Icons.headset_mic_outlined, color: AppColors.primaryBlue, size: 22),
+            SizedBox(width: 10),
+            Text('Soporte y Mesa de Ayuda', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          ],
+        ),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                settings['clinic_name']?.toString() ?? 'MediCore EMR',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Sistema integral de gestión de expedientes clínicos y agenda hospitalaria.',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 16),
+              const Divider(),
+              const SizedBox(height: 12),
+              _buildSupportRow(Icons.phone_outlined, 'Teléfono Soporte', settings['phone']?.toString() ?? '+505 2222 3344'),
+              const SizedBox(height: 10),
+              _buildSupportRow(Icons.email_outlined, 'Correo Soporte', settings['email']?.toString() ?? 'soporte@medicore.com'),
+              const SizedBox(height: 10),
+              _buildSupportRow(Icons.schedule_outlined, 'Horario de Atención', settings['schedule_weekday']?.toString() ?? '08:00 — 18:00'),
+              const SizedBox(height: 10),
+              _buildSupportRow(Icons.location_on_outlined, 'Ubicación', settings['address']?.toString() ?? 'Consultorios Médicos'),
+            ],
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryBlue,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('Entendido', style: TextStyle(color: AppColors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSupportRow(IconData icon, String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: AppColors.primaryBlue),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w500)),
+              Text(value, style: const TextStyle(fontSize: 12, color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -391,7 +587,7 @@ class _TopBarWidgetState extends State<TopBarWidget> {
           const SizedBox(width: 20),
           // Soporte
           TextButton.icon(
-            onPressed: () {},
+            onPressed: _showSupportDialog,
             icon: const Icon(Icons.headset_mic_outlined, size: 18),
             label: const Text('Soporte', style: TextStyle(fontSize: 13)),
             style: TextButton.styleFrom(foregroundColor: AppColors.textSecondary),
@@ -402,21 +598,22 @@ class _TopBarWidgetState extends State<TopBarWidget> {
             children: [
               IconButton(
                 icon: const Icon(Icons.notifications_outlined, size: 22, color: AppColors.textSecondary),
-                onPressed: () {},
-                tooltip: 'Notificaciones',
+                onPressed: _showNotificationsDialog,
+                tooltip: _notifications.isEmpty ? 'Sin notificaciones' : 'Notificaciones (${_notifications.length})',
               ),
-              Positioned(
-                right: 8,
-                top: 8,
-                child: Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: AppColors.danger,
-                    shape: BoxShape.circle,
+              if (_notifications.isNotEmpty)
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: AppColors.danger,
+                      shape: BoxShape.circle,
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
           const SizedBox(width: 8),

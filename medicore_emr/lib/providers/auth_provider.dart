@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 import '../models/user.dart';
+import '../services/supabase_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   SupabaseClient get _supabase => Supabase.instance.client;
@@ -33,6 +34,7 @@ class AuthProvider extends ChangeNotifier {
           _fetchUserProfile(session!.user);
         } else if (data.event == AuthChangeEvent.signedOut) {
           _currentUser = null;
+          SupabaseService().currentUserId = null;
           notifyListeners();
         }
       });
@@ -253,6 +255,7 @@ class AuthProvider extends ChangeNotifier {
       debugPrint('Error en signOut: $e');
     }
     _currentUser = null;
+    SupabaseService().currentUserId = null;
     _error = null;
     notifyListeners();
   }
@@ -319,6 +322,7 @@ class AuthProvider extends ChangeNotifier {
           lastLogin: DateTime.now(),
         );
       }
+      SupabaseService().currentUserId = _currentUser?.id;
     } catch (e) {
       debugPrint('Error al obtener perfil desde BD: $e');
       final metadata = (authUser.userMetadata as Map<String, dynamic>?) ?? {};

@@ -3,6 +3,7 @@ import '../models/patient.dart';
 import '../models/clinical_record.dart';
 import '../models/allergy_alert.dart';
 import '../models/emergency_contact.dart';
+import '../models/diagnostic_file.dart';
 import '../services/supabase_service.dart';
 
 class PatientProvider extends ChangeNotifier {
@@ -14,6 +15,7 @@ class PatientProvider extends ChangeNotifier {
   List<ClinicalRecord> _clinicalRecords = [];
   List<AllergyAlert> _allergyAlerts = [];
   List<EmergencyContact> _emergencyContacts = [];
+  List<DiagnosticFile> _diagnosticFiles = [];
   int _totalPatients = 0;
   int _currentPage = 1;
   String _searchQuery = '';
@@ -25,6 +27,7 @@ class PatientProvider extends ChangeNotifier {
   List<ClinicalRecord> get clinicalRecords => _clinicalRecords;
   List<AllergyAlert> get allergyAlerts => _allergyAlerts;
   List<EmergencyContact> get emergencyContacts => _emergencyContacts;
+  List<DiagnosticFile> get diagnosticFiles => _diagnosticFiles;
   int get totalPatients => _totalPatients;
   int get currentPage => _currentPage;
   String get searchQuery => _searchQuery;
@@ -32,8 +35,18 @@ class PatientProvider extends ChangeNotifier {
 
   Future<void> loadPatients({String? search, String? statusFilter}) async {
     _isLoading = true;
-    if (search != null) _searchQuery = search;
-    if (statusFilter != null) _statusFilter = statusFilter;
+    bool filterChanged = false;
+    if (search != null && search != _searchQuery) {
+      _searchQuery = search;
+      filterChanged = true;
+    }
+    if (statusFilter != null && statusFilter != _statusFilter) {
+      _statusFilter = statusFilter;
+      filterChanged = true;
+    }
+    if (filterChanged) {
+      _currentPage = 1;
+    }
     notifyListeners();
 
     try {
@@ -74,10 +87,12 @@ class PatientProvider extends ChangeNotifier {
           _api.getClinicalRecords(_selectedPatient!.id!),
           _api.getAllergyAlerts(_selectedPatient!.id!),
           _api.getEmergencyContacts(_selectedPatient!.id!),
+          _api.getDiagnosticFiles(_selectedPatient!.id!),
         ]);
         _clinicalRecords = results[0] as List<ClinicalRecord>;
         _allergyAlerts = results[1] as List<AllergyAlert>;
         _emergencyContacts = results[2] as List<EmergencyContact>;
+        _diagnosticFiles = results[3] as List<DiagnosticFile>;
       }
     } catch (e) {
       // Handle error
