@@ -2,10 +2,104 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/growth_record.dart';
+import '../../models/patient.dart';
 import '../../providers/clinical_providers.dart';
+import '../../providers/patient_provider.dart';
 import '../../services/pdf_export_service.dart';
-import '../../services/supabase_service.dart';
 import '../../widgets/common/breadcrumb.dart';
+import '../../widgets/common/patient_autocomplete_field.dart';
+
+/// Helper para cálculo preciso y formateo de edad pediátrica
+String formatPediatricAge(DateTime? birthDate, {DateTime? atDate}) {
+  if (birthDate == null) return 'Edad no registrada';
+  final refDate = atDate ?? DateTime.now();
+  int years = refDate.year - birthDate.year;
+  int months = refDate.month - birthDate.month;
+  int days = refDate.day - birthDate.day;
+  if (days < 0) {
+    months--;
+  }
+  if (months < 0) {
+    years--;
+    months += 12;
+  }
+  if (years <= 0) {
+    if (months <= 0) {
+      final diffDays = refDate.difference(birthDate).inDays.clamp(0, 999);
+      return '$diffDays días';
+    }
+    return '$months ${months == 1 ? "Mes" : "Meses"}';
+  }
+  if (months == 0) {
+    return '$years ${years == 1 ? "Año" : "Años"}';
+  }
+  return '$years ${years == 1 ? "Año" : "Años"} $months ${months == 1 ? "Mes" : "Meses"}';
+}
+
+/// Estándares clínicos de Crecimiento Infantil de la Organización Mundial de la Salud (OMS 0-5 años)
+class WhoStandards {
+  static const List<double> months = [0, 6, 12, 18, 24, 30, 36, 42, 48, 54, 60];
+
+  // Peso (kg) para varones OMS
+  static const List<double> weightP3 = [2.5, 6.4, 7.7, 8.8, 9.7, 10.5, 11.3, 12.0, 12.7, 13.4, 14.1];
+  static const List<double> weightP50 = [3.3, 7.9, 9.6, 10.9, 12.2, 13.3, 14.3, 15.3, 16.3, 17.3, 18.3];
+  static const List<double> weightP97 = [4.4, 9.8, 12.0, 13.7, 15.3, 16.8, 18.3, 19.8, 21.2, 22.7, 24.2];
+
+  // Talla / Estatura (cm) para varones OMS
+  static const List<double> heightP3 = [46.1, 63.6, 71.0, 76.9, 81.7, 86.0, 89.9, 93.1, 96.1, 98.4, 100.7];
+  static const List<double> heightP50 = [49.9, 67.6, 75.7, 82.3, 87.1, 91.9, 96.1, 99.7, 103.3, 106.7, 110.0];
+  static const List<double> heightP97 = [53.7, 71.6, 80.5, 87.7, 92.9, 98.0, 102.7, 106.7, 110.7, 114.6, 119.2];
+
+  // Perímetro Cefálico (cm) para varones OMS
+  static const List<double> headP3 = [31.9, 41.0, 43.5, 44.8, 45.8, 46.5, 47.0, 47.5, 47.9, 48.2, 48.5];
+  static const List<double> headP50 = [34.5, 43.3, 46.1, 47.4, 48.3, 48.9, 49.5, 50.0, 50.4, 50.7, 51.0];
+  static const List<double> headP97 = [37.0, 45.8, 48.6, 49.9, 50.7, 51.4, 52.0, 52.4, 52.8, 53.2, 53.5];
+
+  static double interpolate(List<double> values, double m) {
+    if (m <= 0) return values.first;
+    if (m >= 60) return values.last;
+    final idx = (m / 6.0).floor();
+    if (idx >= values.length - 1) return values.last;
+    final frac = (m - idx * 6.0) / 6.0;
+    return values[idx] + (values[idx + 1] - values[idx]) * frac;
+  }
+
+  static int calculatePercentile(double value, double m, String metric) {
+    List<double> p3List, p50List, p97List;
+    if (metric.contains('Peso')) {
+      p3List = weightP3;
+      p50List = weightP50;
+      p97List = weightP97;
+    } else if (metric.contains('Estatura')) {
+      p3List = heightP3;
+      p50List = heightP50;
+      p97List = heightP97;
+    } else {
+      p3List = headP3;
+      p50List = headP50;
+      p97List = headP97;
+    }
+    final p3 = interpolate(p3List, m);
+    final p50 = interpolate(p50List, m);
+    final p97 = interpolate(p97List, m);
+
+    if (value <= p3) {
+      final frac = (value / (p3 > 0 ? p3 : 1)).clamp(0.0, 1.0);
+      return (frac * 3).round().clamp(1, 3);
+    }
+    if (value >= p97) {
+      final extra = ((value - p97) / (p97 * 0.1) * 2).round().clamp(0, 2);
+      return (97 + extra).clamp(97, 99);
+    }
+    if (value < p50) {
+      final frac = (value - p3) / (p50 - p3);
+      return 3 + (frac * 47).round();
+    } else {
+      final frac = (value - p50) / (p97 - p50);
+      return 50 + (frac * 47).round();
+    }
+  }
+}
 
 class PediatricsGrowthScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -28,23 +122,44 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      int pid = widget.patientId ?? 0;
-      if (pid <= 0) {
-        try {
-          final res = await SupabaseService().getPatients(perPage: 1);
-          if (res.isNotEmpty && res.first.id != null) {
-            pid = res.first.id!;
-          }
-        } catch (_) {}
+      final patientProv = context.read<PatientProvider>();
+      final pediaProv = context.read<PediatricsProvider>();
+
+      if (widget.patientId != null && widget.patientId! > 0) {
+        await patientProv.selectPatientById(widget.patientId!);
+        await pediaProv.loadGrowthData(widget.patientId!);
+        return;
       }
-      if (mounted && pid > 0) {
-        context.read<PediatricsProvider>().loadGrowthData(pid);
+
+      // Si ya hay un paciente seleccionado y tiene id, cargamos sus datos
+      if (patientProv.selectedPatient != null && patientProv.selectedPatient!.id != null) {
+        await pediaProv.loadGrowthData(patientProv.selectedPatient!.id!);
+        return;
+      }
+
+      // Si la lista de pacientes está vacía, cargarla de la base de datos
+      if (patientProv.patients.isEmpty) {
+        await patientProv.loadPatients();
+      }
+
+      if (patientProv.patients.isNotEmpty) {
+        // Seleccionar preferentemente al paciente pediátrico modelo Mateo García (ID 8) o el primer niño
+        final pediatricPatient = patientProv.patients.firstWhere(
+          (p) => p.id == 8 || (p.age != null && p.age! <= 12) || p.fullName.toLowerCase().contains('mateo'),
+          orElse: () => patientProv.patients.first,
+        );
+        patientProv.selectPatient(pediatricPatient);
+        if (pediatricPatient.id != null) {
+          await pediaProv.loadGrowthData(pediatricPatient.id!);
+        }
       }
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    final activePatient = context.watch<PatientProvider>().selectedPatient;
+
     return Consumer<PediatricsProvider>(
       builder: (context, provider, _) {
         final records = provider.records;
@@ -55,20 +170,36 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
           _selectedPointIndex = 0;
         }
 
+        final patientName = activePatient?.fullName ?? 'Paciente Pediátrico';
+        final patientCode = activePatient?.patientCode.isNotEmpty == true ? '#${activePatient!.patientCode}' : '#P-8472';
+        final gender = activePatient?.gender ?? 'Masculino';
+        final ageText = formatPediatricAge(activePatient?.birthDate);
+
         return SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Breadcrumb de navegación
+              // Breadcrumb de navegación dinámico
               Breadcrumb(
                 items: [
                   BreadcrumbItem(label: 'Pacientes', onTap: widget.onBack),
-                  const BreadcrumbItem(label: 'Mateo García (ID: P-8472)'),
-                  const BreadcrumbItem(label: 'Curvas de Crecimiento'),
+                  BreadcrumbItem(
+                    label: activePatient != null ? '$patientName ($patientCode)' : 'Sin Paciente Seleccionado',
+                    onTap: widget.onBack,
+                  ),
+                  const BreadcrumbItem(label: 'Curvas de Crecimiento (OMS)'),
                 ],
               ),
               const SizedBox(height: 20),
+
+              // Banner del Paciente Pediátrico o Selector de Búsqueda
+              if (activePatient == null)
+                _buildPatientSelectorBanner(context)
+              else
+                _buildActivePatientBanner(context, activePatient, provider, records),
+
+              const SizedBox(height: 24),
 
               // Encabezado con selector de métrica y botón de PDF
               Row(
@@ -78,17 +209,17 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Gráficas de Crecimiento (OMS)',
+                        'Gráficas de Crecimiento (Patrón OMS)',
                         style: TextStyle(
-                          fontSize: 26,
+                          fontSize: 22,
                           fontWeight: FontWeight.w700,
                           color: AppColors.textPrimary,
                         ),
                       ),
                       const SizedBox(height: 4),
-                      const Text(
-                        'Mateo García • Masculino • 2 Años 4 Meses (Exp. P-8472)',
-                        style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+                      Text(
+                        '$patientName • $gender • $ageText ($patientCode)',
+                        style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
                       ),
                     ],
                   ),
@@ -96,7 +227,7 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
                     children: [
                       // Selector desplegable de métricas OMS
                       Container(
-                        width: 260,
+                        width: 270,
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         decoration: BoxDecoration(
                           color: AppColors.white,
@@ -135,10 +266,10 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
                           try {
                             await PdfExportService.exportPediatricGrowthPdf(
                               context: context,
-                              patientName: 'Mateo García',
-                              patientCode: 'P-8472',
-                              gender: 'Masculino',
-                              ageText: '2 Años 4 Meses',
+                              patientName: patientName,
+                              patientCode: patientCode,
+                              gender: gender,
+                              ageText: ageText,
                               records: records,
                               activeMetric: selectedMetric,
                             );
@@ -162,7 +293,7 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
                           }
                         },
                         icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
-                        label: const Text('Exportar Gráfica PDF'),
+                        label: const Text('Exportar PDF'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primaryBlue,
                           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
@@ -202,9 +333,9 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
                               Row(
                                 children: [
                                   _legendPill(AppColors.success, '— P50 (Mediana OMS)'),
-                                  const SizedBox(width: 12),
+                                  const SizedBox(width: 14),
                                   _legendPill(AppColors.warning, '— P3 / P97 Límites'),
-                                  const SizedBox(width: 12),
+                                  const SizedBox(width: 14),
                                   _legendPill(AppColors.primaryBlue, '● Mediciones Paciente'),
                                 ],
                               ),
@@ -223,14 +354,40 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
                                   painter: _WhoGrowthChartPainter(
                                     records: records,
                                     selectedMetric: selectedMetric,
+                                    selectedIndex: _selectedPointIndex,
                                   ),
                                 ),
                                 // Tooltip interactivo con datos de la medición seleccionada
                                 if (records.isNotEmpty && _selectedPointIndex < records.length)
                                   Positioned(
-                                    top: 60,
-                                    left: 100,
+                                    top: 15,
+                                    right: 20,
                                     child: _buildTooltip(records[_selectedPointIndex], selectedMetric),
+                                  ),
+                                if (records.isEmpty)
+                                  Center(
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withValues(alpha: 0.9),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(color: AppColors.border),
+                                        boxShadow: const [
+                                          BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 2)),
+                                        ],
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.info_outline, size: 18, color: AppColors.primaryBlue),
+                                          SizedBox(width: 8),
+                                          Text(
+                                            'Sin mediciones registradas. Agregue un control antropométrico con el botón (+).',
+                                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   ),
                               ],
                             ),
@@ -258,15 +415,29 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text(
-                                  'Historial de Mediciones',
-                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Historial Somatométrico',
+                                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                                    ),
+                                    Text(
+                                      '${records.length} controles registrados',
+                                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                                    ),
+                                  ],
                                 ),
                                 Tooltip(
                                   message: 'Registrar nueva medición antropométrica',
-                                  child: IconButton.filledTonal(
-                                    icon: const Icon(Icons.add, size: 20, color: AppColors.primaryBlue),
-                                    onPressed: () => _showAddMeasurementDialog(context, provider),
+                                  child: ElevatedButton.icon(
+                                    icon: const Icon(Icons.add, size: 16),
+                                    label: const Text('Medición'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.primaryBlue,
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    ),
+                                    onPressed: () => _showAddMeasurementDialog(context, provider, activePatient),
                                   ),
                                 ),
                               ],
@@ -280,86 +451,124 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
                             color: AppColors.background,
                             child: const Row(
                               children: [
-                                Expanded(flex: 3, child: Text('Fecha\n(Edad)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary))),
+                                Expanded(flex: 3, child: Text('Fecha / Edad', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary))),
                                 Expanded(flex: 2, child: Text('Peso', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary))),
                                 Expanded(flex: 2, child: Text('Estatura', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary))),
                                 Expanded(flex: 1, child: Text('PC', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary))),
+                                SizedBox(width: 32),
                               ],
                             ),
                           ),
 
-                          // Filas de medidas
-                          ...records.asMap().entries.map((entry) {
-                            final idx = entry.key;
-                            final r = entry.value;
-                            final isSelected = _selectedPointIndex == idx;
-                            return InkWell(
-                              onTap: () => setState(() => _selectedPointIndex = idx),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                decoration: BoxDecoration(
-                                  color: isSelected ? AppColors.primaryBlue.withValues(alpha: 0.08) : null,
-                                  border: const Border(bottom: BorderSide(color: AppColors.borderLight)),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      flex: 3,
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            '${r.date.day.toString().padLeft(2, '0')}/${r.date.month.toString().padLeft(2, '0')}/${r.date.year}',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                                              color: isSelected ? AppColors.primaryBlue : AppColors.textPrimary,
-                                            ),
-                                          ),
-                                          Text(r.ageLabel, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                                        ],
-                                      ),
-                                    ),
-                                    Expanded(
-                                      flex: 2,
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text('${r.weightKg} kg', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-                                          Text('P${r.weightPercentile}', style: const TextStyle(fontSize: 11, color: AppColors.primaryBlue, fontWeight: FontWeight.w600)),
-                                        ],
-                                      ),
-                                    ),
-                                    Expanded(
-                                      flex: 2,
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text('${r.heightCm.toStringAsFixed(1)} cm', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-                                          Text('P${r.heightPercentile}', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                                        ],
-                                      ),
-                                    ),
-                                    Expanded(
-                                      flex: 1,
-                                      child: Text('${r.headCircumferenceCm.toStringAsFixed(1)} cm', style: const TextStyle(fontSize: 12, color: AppColors.textPrimary)),
-                                    ),
-                                  ],
-                                ),
+                          if (records.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.all(32),
+                              child: Column(
+                                children: [
+                                  Icon(Icons.child_care, size: 48, color: Colors.grey.shade400),
+                                  const SizedBox(height: 12),
+                                  const Text(
+                                    'No hay mediciones registradas',
+                                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  const Text(
+                                    'Registre el primer control antropométrico del paciente para ver los percentiles OMS.',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  OutlinedButton.icon(
+                                    onPressed: () => _showAddMeasurementDialog(context, provider, activePatient),
+                                    icon: const Icon(Icons.add, size: 16),
+                                    label: const Text('Registrar Primera Medición'),
+                                  ),
+                                ],
                               ),
-                            );
-                          }),
-
-                          const SizedBox(height: 12),
-                          // Enlace para ver historial completo en diálogo
-                          Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: TextButton.icon(
-                              onPressed: () => _showFullHistoryDialog(context, records, provider),
-                              icon: const Icon(Icons.table_chart_outlined, size: 16),
-                              label: const Text('Ver Historial Detallado y Percentiles', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.primaryBlue)),
+                            )
+                          else
+                            ListView.separated(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: records.length,
+                              separatorBuilder: (context, index) => const Divider(height: 1, color: AppColors.borderLight),
+                              itemBuilder: (context, idx) {
+                                final r = records[idx];
+                                final isSelected = _selectedPointIndex == idx;
+                                return InkWell(
+                                  onTap: () => setState(() => _selectedPointIndex = idx),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                    color: isSelected ? AppColors.primaryBlue.withValues(alpha: 0.08) : null,
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          flex: 3,
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                '${r.date.day.toString().padLeft(2, '0')}/${r.date.month.toString().padLeft(2, '0')}/${r.date.year}',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                                                  color: isSelected ? AppColors.primaryBlue : AppColors.textPrimary,
+                                                ),
+                                              ),
+                                              Text(
+                                                r.ageLabel.isNotEmpty ? r.ageLabel : '${r.ageMonths.toInt()}m',
+                                                style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Expanded(
+                                          flex: 2,
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text('${r.weightKg} kg', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                                              _buildPercentileBadge(r.weightPercentile),
+                                            ],
+                                          ),
+                                        ),
+                                        Expanded(
+                                          flex: 2,
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text('${r.heightCm.toStringAsFixed(1)} cm', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                                              _buildPercentileBadge(r.heightPercentile),
+                                            ],
+                                          ),
+                                        ),
+                                        Expanded(
+                                          flex: 1,
+                                          child: Text('${r.headCircumferenceCm.toStringAsFixed(1)} cm', style: const TextStyle(fontSize: 12, color: AppColors.textPrimary)),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.delete_outline, size: 16, color: AppColors.danger),
+                                          tooltip: 'Eliminar medición',
+                                          onPressed: () => _confirmDeleteMeasurement(context, r, provider),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
-                          ),
+
+                          if (records.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: TextButton.icon(
+                                onPressed: () => _showFullHistoryDialog(context, records, provider, activePatient),
+                                icon: const Icon(Icons.table_chart_outlined, size: 16),
+                                label: const Text('Ver Historial Completo y Detalles', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.primaryBlue)),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -370,6 +579,255 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildPercentileBadge(int percentile) {
+    Color bg;
+    Color fg;
+    if (percentile >= 25 && percentile <= 75) {
+      bg = AppColors.success.withValues(alpha: 0.12);
+      fg = AppColors.success;
+    } else if ((percentile >= 10 && percentile < 25) || (percentile > 75 && percentile <= 90)) {
+      bg = AppColors.warning.withValues(alpha: 0.15);
+      fg = const Color(0xFFD97706);
+    } else {
+      bg = AppColors.danger.withValues(alpha: 0.12);
+      fg = AppColors.danger;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(top: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        'P$percentile',
+        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: fg),
+      ),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // BANNER DEL PACIENTE Y SELECTOR
+  // ══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildPatientSelectorBanner(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.primaryBlue.withValues(alpha: 0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primaryBlue.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.child_care, color: AppColors.primaryBlue, size: 24),
+              SizedBox(width: 10),
+              Text(
+                'Seleccione un Paciente para el Control Pediátrico',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Busque y elija un paciente pediátrico registrado en la base de datos para cargar sus curvas de crecimiento OMS y somatometría.',
+            style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 14),
+          PatientAutocompleteField(
+            hint: 'Escriba nombre o código (ej: Mateo, P-8472)',
+            onPatientSelected: (patient) {
+              if (patient != null) {
+                context.read<PatientProvider>().selectPatient(patient);
+                if (patient.id != null) {
+                  context.read<PediatricsProvider>().loadGrowthData(patient.id!);
+                }
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActivePatientBanner(
+    BuildContext context,
+    Patient activePatient,
+    PediatricsProvider provider,
+    List<GrowthRecord> records,
+  ) {
+    final pName = activePatient.fullName;
+    final pCode = activePatient.patientCode.isNotEmpty ? '#${activePatient.patientCode}' : '#PT-${activePatient.id}';
+    final bDate = activePatient.birthDate;
+    final pAgeStr = formatPediatricAge(bDate);
+    final pGender = activePatient.gender ?? 'Masculino';
+    final pBlood = activePatient.bloodType ?? 'No reg.';
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      pName,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryBlueLight.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        pCode,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primaryBlue,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.success.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text(
+                        'Pediatría (OMS)',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.success,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 16,
+                  runSpacing: 6,
+                  children: [
+                    _infoPill(Icons.cake_outlined, 'Edad: $pAgeStr'),
+                    if (bDate != null)
+                      _infoPill(
+                        Icons.calendar_today_outlined,
+                        'Nacimiento: ${bDate.day.toString().padLeft(2, '0')}/${bDate.month.toString().padLeft(2, '0')}/${bDate.year}',
+                      ),
+                    _infoPill(Icons.person_outline, 'Sexo: $pGender'),
+                    _infoPill(Icons.bloodtype_outlined, 'Grupo: $pBlood'),
+                    _infoPill(Icons.monitor_weight_outlined, '${records.length} controles registrados'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          OutlinedButton.icon(
+            onPressed: () => _showChangePatientDialog(context),
+            icon: const Icon(Icons.swap_horiz, size: 16),
+            label: const Text('Cambiar Paciente'),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              side: const BorderSide(color: AppColors.border),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showChangePatientDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.child_care, color: AppColors.primaryBlue),
+            SizedBox(width: 8),
+            Text('Seleccionar Paciente Pediátrico', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+          ],
+        ),
+        content: SizedBox(
+          width: 480,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Busque por nombre o código de expediente para visualizar o registrar controles antropométricos:',
+                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 16),
+              PatientAutocompleteField(
+                hint: 'Escriba nombre o código (ej: Mateo, P-8472)',
+                onPatientSelected: (patient) {
+                  if (patient != null) {
+                    Navigator.of(ctx).pop();
+                    context.read<PatientProvider>().selectPatient(patient);
+                    if (patient.id != null) {
+                      context.read<PediatricsProvider>().loadGrowthData(patient.id!);
+                    }
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _infoPill(IconData icon, String text) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: AppColors.textSecondary),
+        const SizedBox(width: 4),
+        Text(text, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+      ],
     );
   }
 
@@ -410,48 +868,122 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
           ),
           const SizedBox(height: 2),
           Text(
-            '${record.date.day} $monthName, ${record.date.year} (${record.ageLabel})',
+            '${record.date.day} $monthName, ${record.date.year} (${record.ageLabel.isNotEmpty ? record.ageLabel : "${record.ageMonths.toInt()}m"})',
             style: const TextStyle(fontSize: 10, color: Colors.white70),
           ),
+          if (record.notes != null && record.notes!.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              'Obs: ${record.notes}',
+              style: const TextStyle(fontSize: 10, color: Colors.white70, fontStyle: FontStyle.italic),
+            ),
+          ],
         ],
       ),
     );
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // DIÁLOGOS Y ACCIONES
+  // ══════════════════════════════════════════════════════════════════════════
+
+  Future<void> _confirmDeleteMeasurement(BuildContext context, GrowthRecord record, PediatricsProvider provider) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: AppColors.danger),
+            SizedBox(width: 8),
+            Text('Eliminar Medición', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+          ],
+        ),
+        content: Text(
+          '¿Está seguro de eliminar el registro somatométrico del ${record.date.day.toString().padLeft(2, '0')}/${record.date.month.toString().padLeft(2, '0')}/${record.date.year} (${record.ageLabel})? Esta acción se sincronizará con la base de datos.',
+          style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
+        ),
+        actions: [
+          OutlinedButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Eliminar', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && record.id != null) {
+      final success = await provider.deleteRecord(record.id!);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(success ? 'Medición eliminada correctamente.' : 'Error al eliminar la medición.'),
+            backgroundColor: success ? AppColors.success : AppColors.danger,
+          ),
+        );
+      }
+    }
+  }
+
   /// Diálogo para agregar una nueva medición pediátrica de crecimiento
-  void _showAddMeasurementDialog(BuildContext context, PediatricsProvider provider) {
+  void _showAddMeasurementDialog(BuildContext context, PediatricsProvider provider, Patient? activePatient) {
     DateTime selectedDate = DateTime.now();
+    final bDate = activePatient?.birthDate;
+
+    // Calcular edad inicial en meses y etiqueta
+    double initMonths = 24.0;
+    String initLabel = '2a';
+    if (bDate != null) {
+      final diffDays = selectedDate.difference(bDate).inDays;
+      initMonths = (diffDays / 30.4375).clamp(0.0, 60.0);
+      final y = initMonths ~/ 12;
+      final m = (initMonths % 12).round();
+      initLabel = y == 0 ? '${m}m' : (m == 0 ? '${y}a' : '${y}a ${m}m');
+    }
+
     final dateController = TextEditingController(text: '${selectedDate.day.toString().padLeft(2, '0')}/${selectedDate.month.toString().padLeft(2, '0')}/${selectedDate.year}');
-    final ageLabelController = TextEditingController(text: '2a 6m');
-    final ageMonthsController = TextEditingController(text: '30');
-    final weightController = TextEditingController(text: '14.8');
-    final heightController = TextEditingController(text: '94.0');
-    final headController = TextEditingController(text: '49.5');
+    final ageLabelController = TextEditingController(text: initLabel);
+    final ageMonthsController = TextEditingController(text: initMonths.toStringAsFixed(1));
+    final weightController = TextEditingController(text: '14.5');
+    final heightController = TextEditingController(text: '93.0');
+    final headController = TextEditingController(text: '49.0');
+    final notesController = TextEditingController();
 
     showDialog(
       context: context,
       builder: (dialogCtx) {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
+            final wVal = double.tryParse(weightController.text) ?? 14.5;
+            final hVal = double.tryParse(heightController.text) ?? 93.0;
+            final mVal = double.tryParse(ageMonthsController.text) ?? initMonths;
+            final liveWPerc = WhoStandards.calculatePercentile(wVal, mVal, 'Peso');
+            final liveHPerc = WhoStandards.calculatePercentile(hVal, mVal, 'Estatura');
+
             return AlertDialog(
               title: const Row(
                 children: [
                   Icon(Icons.child_care, color: AppColors.primaryBlue),
                   SizedBox(width: 8),
-                  Text('Registrar Nueva Medición Antropométrica', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                  Text('Registrar Medición Antropométrica', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
                 ],
               ),
               content: SizedBox(
-                width: 480,
+                width: 500,
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const Text(
-                        'Ingrese los valores de la somatometría pediátrica para calcular automáticamente el percentil OMS.',
+                        'Ingrese los valores de somatometría del paciente para calcular automáticamente los percentiles de referencia de la OMS.',
                         style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
                       ),
                       const SizedBox(height: 16),
+
                       // Selector de Fecha
                       TextField(
                         controller: dateController,
@@ -465,43 +997,55 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
                           final picked = await showDatePicker(
                             context: context,
                             initialDate: selectedDate,
-                            firstDate: DateTime(2020),
+                            firstDate: bDate ?? DateTime(2020),
                             lastDate: DateTime.now(),
                           );
                           if (picked != null) {
                             setDialogState(() {
                               selectedDate = picked;
                               dateController.text = '${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}/${picked.year}';
+                              if (bDate != null) {
+                                final diffDays = picked.difference(bDate).inDays;
+                                final newM = (diffDays / 30.4375).clamp(0.0, 60.0);
+                                final y = newM ~/ 12;
+                                final remM = (newM % 12).round();
+                                ageMonthsController.text = newM.toStringAsFixed(1);
+                                ageLabelController.text = y == 0 ? '${remM}m' : (remM == 0 ? '${y}a' : '${y}a ${remM}m');
+                              }
                             });
                           }
                         },
                       ),
                       const SizedBox(height: 12),
+
                       Row(
                         children: [
                           Expanded(
                             child: TextField(
                               controller: ageLabelController,
                               decoration: const InputDecoration(
-                                labelText: 'Etiqueta Edad (ej: 2a 6m)',
+                                labelText: 'Etiqueta Edad (ej: 2a 4m)',
                                 border: OutlineInputBorder(),
                               ),
+                              onChanged: (_) => setDialogState(() {}),
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: TextField(
                               controller: ageMonthsController,
-                              keyboardType: TextInputType.number,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
                               decoration: const InputDecoration(
-                                labelText: 'Edad en Meses (ej: 30)',
+                                labelText: 'Edad en Meses (ej: 28)',
                                 border: OutlineInputBorder(),
                               ),
+                              onChanged: (_) => setDialogState(() {}),
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 12),
+
                       Row(
                         children: [
                           Expanded(
@@ -511,7 +1055,9 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
                               decoration: const InputDecoration(
                                 labelText: 'Peso (kg)',
                                 border: OutlineInputBorder(),
+                                suffixText: 'kg',
                               ),
+                              onChanged: (_) => setDialogState(() {}),
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -522,18 +1068,61 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
                               decoration: const InputDecoration(
                                 labelText: 'Estatura (cm)',
                                 border: OutlineInputBorder(),
+                                suffixText: 'cm',
                               ),
+                              onChanged: (_) => setDialogState(() {}),
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 12),
+
                       TextField(
                         controller: headController,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
                         decoration: const InputDecoration(
                           labelText: 'Perímetro Cefálico (cm)',
                           border: OutlineInputBorder(),
+                          suffixText: 'cm',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      TextField(
+                        controller: notesController,
+                        maxLines: 2,
+                        decoration: const InputDecoration(
+                          labelText: 'Observaciones / Notas Clínicas (opcional)',
+                          hintText: 'Desarrollo psicomotor, alimentación, alertas...',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Vista previa en vivo de los percentiles calculados
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: AppColors.background,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            Row(
+                              children: [
+                                const Text('Percentil Peso: ', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                                Text('P$liveWPerc (OMS)', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.primaryBlue)),
+                              ],
+                            ),
+                            Row(
+                              children: [
+                                const Text('Percentil Talla: ', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                                Text('P$liveHPerc (OMS)', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.success)),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -551,22 +1140,14 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
                     final weight = double.tryParse(weightController.text) ?? 14.0;
                     final height = double.tryParse(heightController.text) ?? 92.0;
                     final head = double.tryParse(headController.text) ?? 49.0;
-                    final months = double.tryParse(ageMonthsController.text) ?? 28.0;
+                    final months = double.tryParse(ageMonthsController.text) ?? initMonths;
 
-                    // Cálculo aproximado de percentiles para niños varones OMS
-                    int wPerc = 50;
-                    if (weight >= 15.0) wPerc = 75;
-                    if (weight >= 16.5) wPerc = 90;
-                    if (weight <= 12.0) wPerc = 25;
-                    if (weight <= 10.5) wPerc = 10;
+                    final wPerc = WhoStandards.calculatePercentile(weight, months, 'Peso');
+                    final hPerc = WhoStandards.calculatePercentile(height, months, 'Estatura');
 
-                    int hPerc = 50;
-                    if (height >= 95.0) hPerc = 75;
-                    if (height <= 85.0) hPerc = 25;
-
-                    final pid = provider.currentPatientId ?? widget.patientId ?? 1;
+                    final pid = activePatient?.id ?? provider.currentPatientId ?? widget.patientId ?? 8;
                     final newRecord = GrowthRecord(
-                      id: DateTime.now().millisecondsSinceEpoch,
+                      id: null,
                       patientId: pid,
                       date: selectedDate,
                       ageLabel: ageLabelController.text.isNotEmpty ? ageLabelController.text : '${months.toInt()}m',
@@ -576,17 +1157,20 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
                       heightCm: height,
                       heightPercentile: hPerc,
                       headCircumferenceCm: head,
+                      notes: notesController.text.trim().isNotEmpty ? notesController.text.trim() : null,
                     );
 
                     final messenger = ScaffoldMessenger.of(context);
                     final nav = Navigator.of(dialogCtx);
-                    await provider.addRecord(newRecord, patientId: pid);
+                    final ok = await provider.addRecord(newRecord, patientId: pid);
                     nav.pop();
 
                     messenger.showSnackBar(
-                      const SnackBar(
-                        content: Text('Nueva medición antropométrica registrada correctamente.'),
-                        backgroundColor: AppColors.success,
+                      SnackBar(
+                        content: Text(ok
+                            ? 'Nueva medición antropométrica guardada correctamente.'
+                            : 'Aviso: Se guardó localmente.'),
+                        backgroundColor: ok ? AppColors.success : AppColors.warning,
                       ),
                     );
                   },
@@ -601,7 +1185,17 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
   }
 
   /// Diálogo de historial detallado de todas las mediciones antropométricas
-  void _showFullHistoryDialog(BuildContext context, List<GrowthRecord> records, PediatricsProvider provider) {
+  void _showFullHistoryDialog(
+    BuildContext context,
+    List<GrowthRecord> records,
+    PediatricsProvider provider,
+    Patient? activePatient,
+  ) {
+    final patientName = activePatient?.fullName ?? 'Paciente Pediátrico';
+    final patientCode = activePatient?.patientCode.isNotEmpty == true ? '#${activePatient!.patientCode}' : '#P-8472';
+    final gender = activePatient?.gender ?? 'Masculino';
+    final ageText = formatPediatricAge(activePatient?.birthDate);
+
     showDialog(
       context: context,
       builder: (ctx) {
@@ -609,16 +1203,16 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
           title: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Historial Antropométrico Completo', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              Text('Historial Antropométrico ($patientName)', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
               ElevatedButton.icon(
                 onPressed: () {
                   Navigator.of(ctx).pop();
                   PdfExportService.exportPediatricGrowthPdf(
                     context: context,
-                    patientName: 'Mateo García',
-                    patientCode: 'P-8472',
-                    gender: 'Masculino',
-                    ageText: '2 Años 4 Meses',
+                    patientName: patientName,
+                    patientCode: patientCode,
+                    gender: gender,
+                    ageText: ageText,
                     records: records,
                     activeMetric: provider.selectedMetric,
                   );
@@ -630,7 +1224,7 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
             ],
           ),
           content: SizedBox(
-            width: 700,
+            width: 780,
             child: SingleChildScrollView(
               child: DataTable(
                 columns: const [
@@ -641,16 +1235,27 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
                   DataColumn(label: Text('Talla')),
                   DataColumn(label: Text('% Talla')),
                   DataColumn(label: Text('P. Cefálico')),
+                  DataColumn(label: Text('Acciones')),
                 ],
                 rows: records.map((r) {
                   return DataRow(cells: [
-                    DataCell(Text('${r.date.day}/${r.date.month}/${r.date.year}')),
-                    DataCell(Text(r.ageLabel)),
+                    DataCell(Text('${r.date.day.toString().padLeft(2, '0')}/${r.date.month.toString().padLeft(2, '0')}/${r.date.year}')),
+                    DataCell(Text(r.ageLabel.isNotEmpty ? r.ageLabel : '${r.ageMonths.toInt()}m')),
                     DataCell(Text('${r.weightKg} kg')),
-                    DataCell(Text('P${r.weightPercentile}')),
+                    DataCell(_buildPercentileBadge(r.weightPercentile)),
                     DataCell(Text('${r.heightCm.toStringAsFixed(1)} cm')),
-                    DataCell(Text('P${r.heightPercentile}')),
+                    DataCell(_buildPercentileBadge(r.heightPercentile)),
                     DataCell(Text('${r.headCircumferenceCm.toStringAsFixed(1)} cm')),
+                    DataCell(
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, size: 16, color: AppColors.danger),
+                        tooltip: 'Eliminar medición',
+                        onPressed: () {
+                          Navigator.of(ctx).pop();
+                          _confirmDeleteMeasurement(context, r, provider);
+                        },
+                      ),
+                    ),
                   ]);
                 }).toList(),
               ),
@@ -672,15 +1277,17 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
 class _WhoGrowthChartPainter extends CustomPainter {
   final List<GrowthRecord> records;
   final String selectedMetric;
+  final int selectedIndex;
 
   _WhoGrowthChartPainter({
     required this.records,
     required this.selectedMetric,
+    this.selectedIndex = 0,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    const double paddingLeft = 45;
+    const double paddingLeft = 50;
     const double paddingBottom = 30;
     final double chartWidth = size.width - paddingLeft - 20;
     final double chartHeight = size.height - paddingBottom - 20;
@@ -700,11 +1307,11 @@ class _WhoGrowthChartPainter extends CustomPainter {
 
     if (isWeight) {
       yMin = 0.0;
-      yMax = 16.0;
-      yLabels = ['0kg', '2kg', '4kg', '6kg', '8kg', '10kg', '12kg', '14kg', '16kg'];
+      yMax = 24.0;
+      yLabels = ['0kg', '3kg', '6kg', '9kg', '12kg', '15kg', '18kg', '21kg', '24kg'];
     } else if (isHeight) {
       yMin = 40.0;
-      yMax = 120.0;
+      yMax = 125.0;
       yLabels = ['40cm', '50cm', '60cm', '70cm', '80cm', '90cm', '100cm', '110cm', '120cm'];
     } else {
       // Perímetro Cefálico
@@ -726,7 +1333,7 @@ class _WhoGrowthChartPainter extends CustomPainter {
       axisTextPaint.paint(canvas, Offset(5, y - 6));
     }
 
-    // Dibujar líneas y etiquetas del eje X (0 a 5 años)
+    // Dibujar líneas y etiquetas del eje X (0 a 5 años = 0 a 60 meses)
     const xLabels = ['Nacim', '1 año', '2 años', '3 años', '4 años', '5 años'];
     for (int i = 0; i < xLabels.length; i++) {
       final x = paddingLeft + (i * (chartWidth / (xLabels.length - 1)));
@@ -746,75 +1353,107 @@ class _WhoGrowthChartPainter extends CustomPainter {
       return size.height - paddingBottom - (normalized * chartHeight);
     }
 
-    // 1. Curva Percentil 50 de la OMS (Verde)
-    final p50Paint = Paint()
-      ..color = AppColors.success.withValues(alpha: 0.85)
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
+    double getXPixel(double ageMonths) {
+      final normalized = (ageMonths / 60.0).clamp(0.0, 1.0);
+      return paddingLeft + (normalized * chartWidth);
+    }
 
-    final p50Path = Path();
+    // Listas de referencia OMS
+    List<double> p3List, p50List, p97List;
     if (isWeight) {
-      p50Path.moveTo(paddingLeft, getYPixel(3.3));
-      p50Path.quadraticBezierTo(
-        paddingLeft + chartWidth * 0.4,
-        getYPixel(12.2),
-        size.width - 20,
-        getYPixel(18.3),
-      );
+      p3List = WhoStandards.weightP3;
+      p50List = WhoStandards.weightP50;
+      p97List = WhoStandards.weightP97;
     } else if (isHeight) {
-      p50Path.moveTo(paddingLeft, getYPixel(50.0));
-      p50Path.quadraticBezierTo(
-        paddingLeft + chartWidth * 0.4,
-        getYPixel(87.0),
-        size.width - 20,
-        getYPixel(110.0),
-      );
+      p3List = WhoStandards.heightP3;
+      p50List = WhoStandards.heightP50;
+      p97List = WhoStandards.heightP97;
     } else {
-      p50Path.moveTo(paddingLeft, getYPixel(34.5));
-      p50Path.quadraticBezierTo(
-        paddingLeft + chartWidth * 0.4,
-        getYPixel(47.5),
-        size.width - 20,
-        getYPixel(51.0),
-      );
+      p3List = WhoStandards.headP3;
+      p50List = WhoStandards.headP50;
+      p97List = WhoStandards.headP97;
+    }
+
+    // Dibujar franja sombreada de normalidad OMS (entre P3 y P97)
+    final zonePath = Path();
+    for (int i = 0; i <= 60; i += 2) {
+      final m = i.toDouble();
+      final x = getXPixel(m);
+      final y = getYPixel(WhoStandards.interpolate(p97List, m));
+      if (i == 0) {
+        zonePath.moveTo(x, y);
+      } else {
+        zonePath.lineTo(x, y);
+      }
+    }
+    for (int i = 60; i >= 0; i -= 2) {
+      final m = i.toDouble();
+      final x = getXPixel(m);
+      final y = getYPixel(WhoStandards.interpolate(p3List, m));
+      zonePath.lineTo(x, y);
+    }
+    zonePath.close();
+
+    final zonePaint = Paint()
+      ..color = const Color(0x0E10B981)
+      ..style = PaintingStyle.fill;
+    canvas.drawPath(zonePath, zonePaint);
+
+    // Curva P3 OMS (Amarillo / Naranja límite inferior)
+    final p3Paint = Paint()
+      ..color = AppColors.warning.withValues(alpha: 0.8)
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+    final p3Path = Path();
+    for (int i = 0; i <= 60; i += 2) {
+      final m = i.toDouble();
+      final x = getXPixel(m);
+      final y = getYPixel(WhoStandards.interpolate(p3List, m));
+      if (i == 0) {
+        p3Path.moveTo(x, y);
+      } else {
+        p3Path.lineTo(x, y);
+      }
+    }
+    canvas.drawPath(p3Path, p3Paint);
+
+    // Curva P97 OMS (Amarillo / Naranja límite superior)
+    final p97Paint = Paint()
+      ..color = AppColors.warning.withValues(alpha: 0.8)
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+    final p97Path = Path();
+    for (int i = 0; i <= 60; i += 2) {
+      final m = i.toDouble();
+      final x = getXPixel(m);
+      final y = getYPixel(WhoStandards.interpolate(p97List, m));
+      if (i == 0) {
+        p97Path.moveTo(x, y);
+      } else {
+        p97Path.lineTo(x, y);
+      }
+    }
+    canvas.drawPath(p97Path, p97Paint);
+
+    // Curva P50 OMS (Mediana Verde)
+    final p50Paint = Paint()
+      ..color = AppColors.success.withValues(alpha: 0.9)
+      ..strokeWidth = 2.2
+      ..style = PaintingStyle.stroke;
+    final p50Path = Path();
+    for (int i = 0; i <= 60; i += 2) {
+      final m = i.toDouble();
+      final x = getXPixel(m);
+      final y = getYPixel(WhoStandards.interpolate(p50List, m));
+      if (i == 0) {
+        p50Path.moveTo(x, y);
+      } else {
+        p50Path.lineTo(x, y);
+      }
     }
     canvas.drawPath(p50Path, p50Paint);
 
-    // 2. Curva Percentiles Límites OMS P3 / P97 (Amarillo / Naranja)
-    final pBoundsPaint = Paint()
-      ..color = AppColors.warning.withValues(alpha: 0.75)
-      ..strokeWidth = 1.5
-      ..style = PaintingStyle.stroke;
-
-    final p97Path = Path();
-    if (isWeight) {
-      p97Path.moveTo(paddingLeft, getYPixel(4.2));
-      p97Path.quadraticBezierTo(
-        paddingLeft + chartWidth * 0.4,
-        getYPixel(14.0),
-        size.width - 20,
-        getYPixel(20.0),
-      );
-    } else if (isHeight) {
-      p97Path.moveTo(paddingLeft, getYPixel(54.0));
-      p97Path.quadraticBezierTo(
-        paddingLeft + chartWidth * 0.4,
-        getYPixel(93.0),
-        size.width - 20,
-        getYPixel(116.0),
-      );
-    } else {
-      p97Path.moveTo(paddingLeft, getYPixel(37.0));
-      p97Path.quadraticBezierTo(
-        paddingLeft + chartWidth * 0.4,
-        getYPixel(49.5),
-        size.width - 20,
-        getYPixel(53.0),
-      );
-    }
-    canvas.drawPath(p97Path, pBoundsPaint);
-
-    // 3. Puntos y Línea de Mediciones del Paciente (Azul Primario)
+    // Mediciones Reales del Paciente
     if (records.isNotEmpty) {
       final patientLinePaint = Paint()
         ..color = AppColors.primaryBlue
@@ -827,14 +1466,18 @@ class _WhoGrowthChartPainter extends CustomPainter {
         ..strokeWidth = 2.5
         ..style = PaintingStyle.stroke;
 
-      final patientPath = Path();
-      final points = <Offset>[];
+      final selectedRingPaint = Paint()
+        ..color = AppColors.primaryBlue.withValues(alpha: 0.25)
+        ..style = PaintingStyle.fill;
 
-      // Ordenar cronológicamente
+      final patientPath = Path();
+      final points = <Map<String, dynamic>>[];
+
+      // Ordenar cronológicamente por edad en meses para trazar la línea continua
       final sorted = List<GrowthRecord>.from(records)..sort((a, b) => a.ageMonths.compareTo(b.ageMonths));
       for (int i = 0; i < sorted.length; i++) {
         final r = sorted[i];
-        final x = paddingLeft + ((r.ageMonths / 60.0).clamp(0.0, 1.0) * chartWidth);
+        final x = getXPixel(r.ageMonths);
 
         double val;
         if (isWeight) {
@@ -846,7 +1489,7 @@ class _WhoGrowthChartPainter extends CustomPainter {
         }
 
         final y = getYPixel(val);
-        points.add(Offset(x, y));
+        points.add({'offset': Offset(x, y), 'record': r});
 
         if (i == 0) {
           patientPath.moveTo(x, y);
@@ -857,15 +1500,29 @@ class _WhoGrowthChartPainter extends CustomPainter {
 
       canvas.drawPath(patientPath, patientLinePaint);
 
-      for (final pt in points) {
-        canvas.drawCircle(pt, 5, pointFillPaint);
-        canvas.drawCircle(pt, 5, pointStrokePaint);
+      final activeRecord = (selectedIndex >= 0 && selectedIndex < records.length) ? records[selectedIndex] : null;
+
+      for (final p in points) {
+        final pt = p['offset'] as Offset;
+        final r = p['record'] as GrowthRecord;
+        final isSelected = activeRecord != null && r.id == activeRecord.id;
+
+        if (isSelected) {
+          canvas.drawCircle(pt, 10, selectedRingPaint);
+          canvas.drawCircle(pt, 6, pointStrokePaint);
+          canvas.drawCircle(pt, 4, Paint()..color = AppColors.primaryBlue);
+        } else {
+          canvas.drawCircle(pt, 5, pointFillPaint);
+          canvas.drawCircle(pt, 5, pointStrokePaint);
+        }
       }
     }
   }
 
   @override
   bool shouldRepaint(covariant _WhoGrowthChartPainter oldDelegate) {
-    return oldDelegate.selectedMetric != selectedMetric || oldDelegate.records.length != records.length;
+    return oldDelegate.selectedMetric != selectedMetric ||
+        oldDelegate.records.length != records.length ||
+        oldDelegate.selectedIndex != selectedIndex;
   }
 }

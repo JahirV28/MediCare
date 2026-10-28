@@ -1473,6 +1473,16 @@ class SupabaseService {
     }
   }
 
+  Future<bool> deletePediatricGrowthRecord(int recordId) async {
+    try {
+      await _client.from('pediatric_growth_records').delete().eq('id', recordId);
+      return true;
+    } catch (e) {
+      debugPrint('Error eliminando control pediátrico: $e');
+      return false;
+    }
+  }
+
   // ══════════════════════════════════════════════════════════════════════════
   // FINANZAS Y FACTURACIÓN
   // ══════════════════════════════════════════════════════════════════════════

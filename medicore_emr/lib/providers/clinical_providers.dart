@@ -487,12 +487,13 @@ class PediatricsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> addRecord(GrowthRecord record, {int? patientId}) async {
-    _records.insert(0, record);
-    // Ordenar de más reciente a más antiguo
-    _records.sort((a, b) => b.date.compareTo(a.date));
+  void clear() {
+    _records = [];
+    _currentPatientId = null;
     notifyListeners();
+  }
 
+  Future<bool> addRecord(GrowthRecord record, {int? patientId}) async {
     final targetPatientId = patientId ?? _currentPatientId;
     if (targetPatientId != null && targetPatientId > 0) {
       final ok = await _api.savePediatricGrowthRecord(
@@ -505,9 +506,32 @@ class PediatricsProvider extends ChangeNotifier {
         headCircumferenceCm: record.headCircumferenceCm,
         weightPercentile: record.weightPercentile,
         heightPercentile: record.heightPercentile,
-        notes: null,
+        notes: record.notes,
       );
+      if (ok) {
+        await loadGrowthData(targetPatientId);
+      }
       return ok;
+    }
+    _records.insert(0, record);
+    _records.sort((a, b) => b.date.compareTo(a.date));
+    notifyListeners();
+    return true;
+  }
+
+  Future<bool> deleteRecord(int recordId) async {
+    final prevRecords = List<GrowthRecord>.from(_records);
+    _records.removeWhere((r) => r.id == recordId);
+    notifyListeners();
+
+    final ok = await _api.deletePediatricGrowthRecord(recordId);
+    if (!ok) {
+      _records = prevRecords;
+      notifyListeners();
+      return false;
+    }
+    if (_currentPatientId != null) {
+      await loadGrowthData(_currentPatientId!);
     }
     return true;
   }
