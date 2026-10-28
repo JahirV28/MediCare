@@ -1415,7 +1415,7 @@ class _WhoGrowthChartPainter extends CustomPainter {
     const double paddingLeft = 55;
     const double paddingRight = 25;
     const double paddingBottom = 35;
-    const double paddingTop = 25;
+    const double paddingTop = 32;
 
     final double chartWidth = size.width - paddingLeft - paddingRight;
     final double chartHeight = size.height - paddingBottom - paddingTop;
@@ -1429,21 +1429,62 @@ class _WhoGrowthChartPainter extends CustomPainter {
     final bool isWeight = selectedMetric.contains('Peso');
     final bool isHeight = selectedMetric.contains('Estatura');
 
+    // Escanear el valor máximo real de las mediciones del paciente para auto-escalado dinámico
+    double maxPatientVal = 0.0;
+    for (final r in records) {
+      if (isWeight && r.weightKg > maxPatientVal) {
+        maxPatientVal = r.weightKg;
+      } else if (isHeight && r.heightCm > maxPatientVal) {
+        maxPatientVal = r.heightCm;
+      } else if (!isWeight && !isHeight && r.headCircumferenceCm > maxPatientVal) {
+        maxPatientVal = r.headCircumferenceCm;
+      }
+    }
+
     double yMin, yMax;
     List<String> yLabels;
 
     if (isWeight) {
       yMin = 0.0;
-      yMax = 25.0;
-      yLabels = ['0 kg', '5 kg', '10 kg', '15 kg', '20 kg', '25 kg'];
+      if (maxPatientVal > 22.0) {
+        // Auto-escalado dinámico: margen holgado de al menos 15% sobre el dato más alto
+        final target = maxPatientVal * 1.15;
+        double step = 5.0;
+        if (target > 70) {
+          step = 15.0;
+        } else if (target > 40) {
+          step = 10.0;
+        }
+        yMax = (target / step).ceil() * step;
+        final interval = yMax / 5.0;
+        yLabels = List.generate(6, (i) => '${(i * interval).round()} kg');
+      } else {
+        yMax = 25.0;
+        yLabels = ['0 kg', '5 kg', '10 kg', '15 kg', '20 kg', '25 kg'];
+      }
     } else if (isHeight) {
       yMin = 45.0;
-      yMax = 125.0;
-      yLabels = ['45 cm', '60 cm', '75 cm', '90 cm', '105 cm', '120 cm'];
+      if (maxPatientVal > 120.0) {
+        final target = maxPatientVal * 1.12;
+        final step = target > 160 ? 25.0 : 15.0;
+        yMax = ((target - yMin) / step).ceil() * step + yMin;
+        final interval = (yMax - yMin) / 5.0;
+        yLabels = List.generate(6, (i) => '${(yMin + i * interval).round()} cm');
+      } else {
+        yMax = 125.0;
+        yLabels = ['45 cm', '60 cm', '75 cm', '90 cm', '105 cm', '120 cm'];
+      }
     } else {
       yMin = 30.0;
-      yMax = 55.0;
-      yLabels = ['30 cm', '35 cm', '40 cm', '45 cm', '50 cm', '55 cm'];
+      if (maxPatientVal > 53.0) {
+        final target = maxPatientVal * 1.12;
+        yMax = ((target - yMin) / 5.0).ceil() * 5.0 + yMin;
+        final interval = (yMax - yMin) / 5.0;
+        yLabels = List.generate(6, (i) => '${(yMin + i * interval).round()} cm');
+      } else {
+        yMax = 55.0;
+        yLabels = ['30 cm', '35 cm', '40 cm', '45 cm', '50 cm', '55 cm'];
+      }
     }
 
     // Dibujar líneas y etiquetas del eje Y
@@ -1582,8 +1623,6 @@ class _WhoGrowthChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _WhoGrowthChartPainter oldDelegate) {
-    return oldDelegate.selectedMetric != selectedMetric ||
-        oldDelegate.records.length != records.length ||
-        oldDelegate.selectedIndex != selectedIndex;
+    return true;
   }
 }

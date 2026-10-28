@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/diagnostic_file.dart';
 import '../../providers/clinical_providers.dart';
+import '../../providers/patient_provider.dart';
 import '../../services/supabase_service.dart';
 
 class DiagnosticFilesScreen extends StatefulWidget {
@@ -18,6 +19,13 @@ class DiagnosticFilesScreen extends StatefulWidget {
 class _DiagnosticFilesScreenState extends State<DiagnosticFilesScreen> {
   int _currentPage = 1;
   double _zoomLevel = 1.0;
+  final TransformationController _transformationController = TransformationController();
+
+  @override
+  void dispose() {
+    _transformationController.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -38,8 +46,38 @@ class _DiagnosticFilesScreenState extends State<DiagnosticFilesScreen> {
     });
   }
 
+  void _zoomIn() {
+    setState(() {
+      _zoomLevel = (_zoomLevel + 0.15).clamp(0.6, 2.5);
+      _transformationController.value = Matrix4.diagonal3Values(_zoomLevel, _zoomLevel, 1.0);
+    });
+  }
+
+  void _zoomOut() {
+    setState(() {
+      _zoomLevel = (_zoomLevel - 0.15).clamp(0.6, 2.5);
+      _transformationController.value = Matrix4.diagonal3Values(_zoomLevel, _zoomLevel, 1.0);
+    });
+  }
+
+  void _resetZoom() {
+    setState(() {
+      _zoomLevel = 1.0;
+      _transformationController.value = Matrix4.identity();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    final activePatient = context.watch<PatientProvider>().selectedPatient;
+    final patientName = activePatient?.fullName ?? 'García, Ana';
+    final patientCode = activePatient?.patientCode.isNotEmpty == true ? '#${activePatient!.patientCode}' : '#EXP-84729';
+    final bDate = activePatient?.birthDate;
+    final birthDateStr = bDate != null
+        ? 'F. Nac: ${bDate.day.toString().padLeft(2, '0')}/${bDate.month.toString().padLeft(2, '0')}/${bDate.year} (${activePatient?.age ?? 0} años)'
+        : 'F. Nac: 12/04/1980 (43 años)';
+    final genderStr = activePatient?.gender ?? 'Femenino';
+
     return Consumer<DiagnosticProvider>(
       builder: (context, provider, _) {
         final files = provider.files;
@@ -57,18 +95,18 @@ class _DiagnosticFilesScreenState extends State<DiagnosticFilesScreen> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'García, Ana - #EXP-84729',
-                        style: TextStyle(
+                      Text(
+                        '$patientName - $patientCode',
+                        style: const TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.w700,
                           color: AppColors.textPrimary,
                         ),
                       ),
                       const SizedBox(height: 4),
-                      const Text(
-                        'F. Nac: 12/04/1980 (43 años) • Femenino',
-                        style: TextStyle(
+                      Text(
+                        '$birthDateStr • $genderStr',
+                        style: const TextStyle(
                           fontSize: 14,
                           color: AppColors.textSecondary,
                         ),
@@ -330,15 +368,23 @@ class _DiagnosticFilesScreenState extends State<DiagnosticFilesScreen> {
                               Row(
                                 children: [
                                   IconButton(
-                                    icon: const Icon(Icons.zoom_in, size: 20, color: AppColors.textSecondary),
-                                    onPressed: () => setState(() => _zoomLevel = (_zoomLevel + 0.1).clamp(0.8, 1.5)),
+                                    icon: const Icon(Icons.zoom_out, size: 20, color: AppColors.textSecondary),
+                                    tooltip: 'Reducir zoom',
+                                    onPressed: _zoomOut,
                                   ),
                                   IconButton(
-                                    icon: const Icon(Icons.zoom_out, size: 20, color: AppColors.textSecondary),
-                                    onPressed: () => setState(() => _zoomLevel = (_zoomLevel - 0.1).clamp(0.8, 1.5)),
+                                    icon: const Icon(Icons.zoom_in, size: 20, color: AppColors.textSecondary),
+                                    tooltip: 'Aumentar zoom',
+                                    onPressed: _zoomIn,
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.restart_alt, size: 20, color: AppColors.textSecondary),
+                                    tooltip: 'Restablecer escala (100%)',
+                                    onPressed: _resetZoom,
                                   ),
                                   IconButton(
                                     icon: const Icon(Icons.open_in_new, size: 18, color: AppColors.textSecondary),
+                                    tooltip: 'Abrir en visor completo',
                                     onPressed: () {},
                                   ),
                                 ],
@@ -347,112 +393,161 @@ class _DiagnosticFilesScreenState extends State<DiagnosticFilesScreen> {
                           ),
                           const SizedBox(height: 12),
 
-                          // Document Canvas Area
-                          Container(
-                            height: 380,
-                            width: double.infinity,
-                            decoration: BoxDecoration(
+                          // Document Canvas Area (Estrictamente contenido para que nunca desborde)
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            clipBehavior: Clip.antiAlias,
+                            child: Container(
+                              height: 380,
+                              width: double.infinity,
                               color: const Color(0xFF282C34),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                // Laboratory Results Document Simulation
-                                Transform.scale(
-                                  scale: _zoomLevel,
-                                  child: Container(
-                                    width: 320,
-                                    height: 340,
-                                    padding: const EdgeInsets.all(20),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.white,
-                                      borderRadius: BorderRadius.circular(4),
-                                      boxShadow: const [
-                                        BoxShadow(color: Colors.black26, blurRadius: 10, offset: Offset(0, 4)),
-                                      ],
+                              child: Stack(
+                                children: [
+                                  // Pan & Zoom interactive container
+                                  Positioned.fill(
+                                    child: InteractiveViewer(
+                                      transformationController: _transformationController,
+                                      clipBehavior: Clip.hardEdge,
+                                      minScale: 0.6,
+                                      maxScale: 2.8,
+                                      boundaryMargin: const EdgeInsets.all(160),
+                                      onInteractionUpdate: (details) {
+                                        final scale = _transformationController.value.getMaxScaleOnAxis();
+                                        if ((scale - _zoomLevel).abs() > 0.05) {
+                                          setState(() => _zoomLevel = scale);
+                                        }
+                                      },
+                                      child: Center(
+                                        child: Container(
+                                          width: 320,
+                                          height: 340,
+                                          padding: const EdgeInsets.all(20),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.white,
+                                            borderRadius: BorderRadius.circular(4),
+                                            boxShadow: const [
+                                              BoxShadow(color: Colors.black45, blurRadius: 14, offset: Offset(0, 6)),
+                                            ],
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              // Header
+                                              Row(
+                                                children: [
+                                                  Container(
+                                                    padding: const EdgeInsets.all(4),
+                                                    color: AppColors.primaryBlue,
+                                                    child: const Icon(Icons.local_hospital, size: 14, color: AppColors.white),
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      const Text('HOSPITAL GENERAL CLÍNICO • LABORATORIO CENTRAL', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w700)),
+                                                      Text('PACIENTE: ${patientName.toUpperCase()} • $patientCode', style: const TextStyle(fontSize: 7, color: AppColors.textSecondary)),
+                                                    ],
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 10),
+                                              const Divider(height: 1),
+                                              const SizedBox(height: 8),
+                                              const Text('PANEL METABÓLICO COMPLETO (SANGRE)', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700)),
+                                              const SizedBox(height: 8),
+                                              _docRow('GLUCOSA', '98 mg/dL', '70 - 99', 'NORMAL'),
+                                              _docRow('NITRÓGENO UREICO (BUN)', '14 mg/dL', '7 - 20', 'NORMAL'),
+                                              _docRow('CREATININA', '0.9 mg/dL', '0.6 - 1.2', 'NORMAL'),
+                                              _docRow('SODIO', '139 mmol/L', '135 - 145', 'NORMAL'),
+                                              _docRow('POTASIO', '4.2 mmol/L', '3.5 - 5.0', 'NORMAL'),
+                                              _docRow('CLORURO', '101 mmol/L', '96 - 106', 'NORMAL'),
+                                              _docRow('CALCIO SÉRICO', '9.4 mg/dL', '8.5 - 10.2', 'NORMAL'),
+                                              const Spacer(),
+                                              const Align(
+                                                alignment: Alignment.centerRight,
+                                                child: Text('Validado por: Dra. M. Lynch, Patóloga Clínica • Página 1/3', style: TextStyle(fontSize: 7, color: AppColors.textHint)),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
                                     ),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        // Header
-                                        Row(
+                                  ),
+
+                                  // Barra de herramientas flotante fija en la parte inferior, SIEMPRE visible sobre el documento
+                                  Positioned(
+                                    bottom: 14,
+                                    left: 0,
+                                    right: 0,
+                                    child: Center(
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xDD0F172A),
+                                          borderRadius: BorderRadius.circular(24),
+                                          border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+                                          boxShadow: const [
+                                            BoxShadow(color: Colors.black54, blurRadius: 10, offset: Offset(0, 4)),
+                                          ],
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
                                           children: [
+                                            IconButton(
+                                              icon: const Icon(Icons.remove_circle_outline, size: 18, color: Colors.white),
+                                              tooltip: 'Reducir zoom',
+                                              onPressed: _zoomOut,
+                                              constraints: const BoxConstraints(),
+                                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            InkWell(
+                                              onTap: _resetZoom,
+                                              borderRadius: BorderRadius.circular(4),
+                                              child: Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                child: Text(
+                                                  '${(_zoomLevel * 100).round()}%',
+                                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white),
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            IconButton(
+                                              icon: const Icon(Icons.add_circle_outline, size: 18, color: Colors.white),
+                                              tooltip: 'Aumentar zoom',
+                                              onPressed: _zoomIn,
+                                              constraints: const BoxConstraints(),
+                                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                                            ),
                                             Container(
-                                              padding: const EdgeInsets.all(4),
-                                              color: AppColors.primaryBlue,
-                                              child: const Icon(Icons.local_hospital, size: 14, color: AppColors.white),
+                                              height: 16,
+                                              width: 1,
+                                              margin: const EdgeInsets.symmetric(horizontal: 10),
+                                              color: Colors.white24,
+                                            ),
+                                            IconButton(
+                                              icon: const Icon(Icons.fit_screen, size: 17, color: Colors.white),
+                                              tooltip: 'Ajustar a 100%',
+                                              onPressed: _resetZoom,
+                                              constraints: const BoxConstraints(),
+                                              padding: const EdgeInsets.symmetric(horizontal: 4),
                                             ),
                                             const SizedBox(width: 8),
-                                            const Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Text('HOSPITAL GENERAL CLÍNICO • LABORATORIO CENTRAL', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w700)),
-                                                Text('PACIENTE: GARCÍA, ANA • EXP-84729', style: TextStyle(fontSize: 7, color: AppColors.textSecondary)),
-                                              ],
+                                            InkWell(
+                                              onTap: () => setState(() => _currentPage = _currentPage == 3 ? 1 : _currentPage + 1),
+                                              child: Text(
+                                                'Pág. $_currentPage/3',
+                                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
+                                              ),
                                             ),
                                           ],
                                         ),
-                                        const SizedBox(height: 10),
-                                        const Divider(height: 1),
-                                        const SizedBox(height: 8),
-                                        const Text('PANEL METABÓLICO COMPLETO (SANGRE)', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700)),
-                                        const SizedBox(height: 8),
-                                        _docRow('GLUCOSA', '98 mg/dL', '70 - 99', 'NORMAL'),
-                                        _docRow('NITRÓGENO UREICO (BUN)', '14 mg/dL', '7 - 20', 'NORMAL'),
-                                        _docRow('CREATININA', '0.9 mg/dL', '0.6 - 1.2', 'NORMAL'),
-                                        _docRow('SODIO', '139 mmol/L', '135 - 145', 'NORMAL'),
-                                        _docRow('POTASIO', '4.2 mmol/L', '3.5 - 5.0', 'NORMAL'),
-                                        _docRow('CLORURO', '101 mmol/L', '96 - 106', 'NORMAL'),
-                                        _docRow('CALCIO SÉRICO', '9.4 mg/dL', '8.5 - 10.2', 'NORMAL'),
-                                        const Spacer(),
-                                        const Align(
-                                          alignment: Alignment.centerRight,
-                                          child: Text('Validado por: Dra. M. Lynch, Patóloga Clínica • Página 1/3', style: TextStyle(fontSize: 7, color: AppColors.textHint)),
-                                        ),
-                                      ],
+                                      ),
                                     ),
                                   ),
-                                ),
-
-                                // Bottom Pagination Pill
-                                Positioned(
-                                  bottom: 16,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: Colors.black.withValues(alpha: 0.7),
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        IconButton(
-                                          icon: const Icon(Icons.contrast, size: 16, color: AppColors.white),
-                                          onPressed: () {},
-                                          constraints: const BoxConstraints(),
-                                          padding: EdgeInsets.zero,
-                                        ),
-                                        const SizedBox(width: 12),
-                                        IconButton(
-                                          icon: const Icon(Icons.fullscreen, size: 18, color: AppColors.white),
-                                          onPressed: () {},
-                                          constraints: const BoxConstraints(),
-                                          padding: EdgeInsets.zero,
-                                        ),
-                                        const SizedBox(width: 16),
-                                        InkWell(
-                                          onTap: () => setState(() => _currentPage = _currentPage == 3 ? 1 : _currentPage + 1),
-                                          child: Text(
-                                            'Página $_currentPage/3',
-                                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.white),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                           const SizedBox(height: 16),

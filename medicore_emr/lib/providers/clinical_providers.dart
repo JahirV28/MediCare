@@ -306,6 +306,11 @@ class OdontologyProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void clearSelectedSurfaces() {
+    _selectedSurfaces.clear();
+    notifyListeners();
+  }
+
   void setCondition(String condition) {
     _selectedCondition = condition;
     notifyListeners();
@@ -354,12 +359,21 @@ class OdontologyProvider extends ChangeNotifier {
       }
     }
 
+    // Si no hay superficies marcadas y no es pieza ausente/extraída, se restablece a sana
+    if (surf.isEmpty && resolvedCondition != ToothCondition.missing) {
+      resolvedCondition = ToothCondition.healthy;
+    }
+
+    final activeProc = resolvedCondition == ToothCondition.healthy
+        ? null
+        : (procedureName.isNotEmpty ? procedureName : 'Evaluación Dental');
+
     // Actualización optimista inmediata
     _teethState[tooth] = DentalToothState(
       toothNumber: tooth,
       condition: resolvedCondition,
       affectedSurfaces: surf,
-      activeProcedure: procedureName,
+      activeProcedure: activeProc,
     );
 
     _logs.insert(

@@ -912,8 +912,21 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
           ),
           const SizedBox(height: 14),
 
-          // Superficies dentales afectadas
-          const Text('Superficie(s) Afectada(s)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+          // Superficies dentales afectadas (5 caras anatómicas FDI)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Superficie(s) Afectada(s)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+              if (provider.selectedSurfaces.isNotEmpty)
+                InkWell(
+                  onTap: () => provider.clearSelectedSurfaces(),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    child: Text('Limpiar / Desmarcar', style: TextStyle(fontSize: 11, color: AppColors.primaryBlue, fontWeight: FontWeight.w600)),
+                  ),
+                ),
+            ],
+          ),
           const SizedBox(height: 6),
           Row(
             children: [
@@ -927,7 +940,7 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
             children: [
               _surfaceCheck('Vestibular / Bucal (V/B)', 'B', provider),
               _surfaceCheck('Lingual / Palatino (L/P)', 'L', provider),
-              _surfaceCheck('Cervical (C)', 'C', provider),
+              const Expanded(child: SizedBox()),
             ],
           ),
           const SizedBox(height: 14),
@@ -1105,6 +1118,11 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
                     } else if (condLower.contains('ausen') || condLower.contains('extrac') || condLower.contains('perdid')) {
                       cond = ToothCondition.missing;
                     } else {
+                      cond = ToothCondition.healthy;
+                    }
+
+                    // Si no se marcó ninguna superficie y no es pieza ausente, se normaliza a sana
+                    if (provider.selectedSurfaces.isEmpty && cond != ToothCondition.missing) {
                       cond = ToothCondition.healthy;
                     }
 
@@ -1439,7 +1457,7 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
                       const SizedBox(height: 6),
                       Wrap(
                         spacing: 8,
-                        children: ['M', 'O', 'D', 'B', 'L', 'C'].map((s) {
+                        children: ['M', 'O', 'D', 'B', 'L'].map((s) {
                           final isChecked = selectedSurfaces.contains(s);
                           return FilterChip(
                             label: Text(s, style: TextStyle(fontSize: 11, fontWeight: isChecked ? FontWeight.w700 : FontWeight.normal)),
@@ -1620,6 +1638,11 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
                       cond = ToothCondition.healthy;
                     }
 
+                    // Si no se marcó ninguna superficie y no es pieza ausente, se normaliza a sana
+                    if (provider.selectedSurfaces.isEmpty && cond != ToothCondition.missing) {
+                      cond = ToothCondition.healthy;
+                    }
+
                     await provider.addFinding(
                       toothNumber: selectedTooth,
                       condition: cond,
@@ -1747,7 +1770,7 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
                       const SizedBox(height: 6),
                       Wrap(
                         spacing: 8,
-                        children: ['M', 'O', 'D', 'B', 'L', 'C'].map((s) {
+                        children: ['M', 'O', 'D', 'B', 'L'].map((s) {
                           final isChecked = editSurfaces.contains(s);
                           return FilterChip(
                             label: Text(s, style: TextStyle(fontSize: 11, fontWeight: isChecked ? FontWeight.w700 : FontWeight.normal)),
@@ -1847,6 +1870,11 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
                     } else if (cLower.contains('ausen') || cLower.contains('extrac') || cLower.contains('perdid')) {
                       cond = ToothCondition.missing;
                     } else {
+                      cond = ToothCondition.healthy;
+                    }
+
+                    // Si no se marcó ninguna superficie y no es pieza ausente, se normaliza a sana
+                    if (provider.selectedSurfaces.isEmpty && cond != ToothCondition.missing) {
                       cond = ToothCondition.healthy;
                     }
 
@@ -2006,7 +2034,9 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
                 height: 5,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: state.activeProcedure != null && state.activeProcedure!.isNotEmpty
+                  color: (state.activeProcedure != null &&
+                          state.activeProcedure!.isNotEmpty &&
+                          (state.affectedSurfaces.isNotEmpty || state.condition == ToothCondition.missing))
                       ? (state.condition == ToothCondition.caries ? AppColors.danger : AppColors.primaryBlue)
                       : Colors.transparent,
                 ),
@@ -2157,16 +2187,15 @@ class ToothPainter extends CustomPainter {
     final rightSurface = isRightSideOfPatient ? 'M' : 'D';
 
     Color getSurfaceColor(String surfaceCode) {
-      if (state.condition == ToothCondition.healthy) {
+      if (state.condition == ToothCondition.healthy || state.affectedSurfaces.isEmpty) {
         return Colors.white;
       }
-      final isAffected = state.affectedSurfaces.isEmpty ||
-          state.affectedSurfaces.any((s) {
-            final sUpper = s.toUpperCase();
-            if (surfaceCode == 'B') return sUpper == 'B' || sUpper == 'V';
-            if (surfaceCode == 'L') return sUpper == 'L' || sUpper == 'P';
-            return sUpper == surfaceCode;
-          });
+      final isAffected = state.affectedSurfaces.any((s) {
+        final sUpper = s.toUpperCase();
+        if (surfaceCode == 'B') return sUpper == 'B' || sUpper == 'V';
+        if (surfaceCode == 'L') return sUpper == 'L' || sUpper == 'P';
+        return sUpper == surfaceCode;
+      });
 
       if (!isAffected) return Colors.white;
 
