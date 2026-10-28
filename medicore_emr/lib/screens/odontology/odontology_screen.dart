@@ -50,15 +50,15 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
   ];
 
   static const List<String> _conditionsList = [
+    'Sano / Sin Patología',
     'Caries Activa / Esmalte',
     'Caries Dentinaria Profunda',
-    'Pulpitis Reversible / Irreversible',
     'Tratado / Restaurado',
     'Corona / Prótesis Existente',
+    'Endodoncia / Tratamiento de Conducto',
     'Ausente / Extracción Previa',
     'Afección Periodontal / Movilidad',
     'Fractura Coronal / Traumatismo',
-    'Sano / Sin Patología',
   ];
 
   static const List<String> _anesthesiaOptions = [
@@ -72,14 +72,45 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final selectedPatient = context.read<PatientProvider>().selectedPatient;
-      if (selectedPatient != null && selectedPatient.id != null) {
-        context.read<OdontologyProvider>().loadOdontologyData(selectedPatient.id);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final patientProv = context.read<PatientProvider>();
+      final odontoProv = context.read<OdontologyProvider>();
+
+      if (patientProv.selectedPatient != null && patientProv.selectedPatient!.id != null) {
+        await odontoProv.loadOdontologyData(patientProv.selectedPatient!.id);
       } else {
-        context.read<OdontologyProvider>().clear();
+        if (patientProv.patients.isEmpty) {
+          await patientProv.loadPatients();
+        }
+        if (patientProv.patients.isNotEmpty) {
+          final defaultPatient = patientProv.patients.firstWhere(
+            (p) => p.id == 7,
+            orElse: () => patientProv.patients.first,
+          );
+          patientProv.selectPatient(defaultPatient);
+          if (defaultPatient.id != null) {
+            await odontoProv.loadOdontologyData(defaultPatient.id);
+          }
+        } else {
+          odontoProv.clear();
+        }
       }
     });
+  }
+
+  void _onToothSelected(int toothNum, OdontologyProvider provider) {
+    provider.selectTooth(toothNum);
+    final toothState = provider.teethState[toothNum];
+    if (toothState != null && toothState.activeProcedure != null && toothState.activeProcedure!.isNotEmpty) {
+      _procedureController.text = toothState.activeProcedure!;
+    } else {
+      _procedureController.text = 'Obturación con Resina Composite';
+    }
+    if (toothState?.condition == ToothCondition.treated) {
+      setState(() => _selectedStatus = 'Completado');
+    } else {
+      setState(() => _selectedStatus = 'Pendiente');
+    }
   }
 
   @override
@@ -173,54 +204,178 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
                               ),
                               const SizedBox(height: 24),
 
-                              // Contenedor de las Arcadas Dentales
+                              // Contenedor de las Arcadas Dentales (Organizado por Cuadrantes Anatómicos FDI)
                               Container(
-                                padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
                                 decoration: BoxDecoration(
                                   color: AppColors.background,
-                                  borderRadius: BorderRadius.circular(8),
+                                  borderRadius: BorderRadius.circular(10),
                                   border: Border.all(color: AppColors.border),
                                 ),
-                                child: Column(
-                                  children: [
-                                    const Text(
-                                      'Maxilar Superior (Arcada Superior)',
-                                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
-                                    ),
-                                    const SizedBox(height: 16),
+                                child: SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: Column(
+                                    children: [
+                                      // Cabecera Arcada Superior
+                                      const Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(Icons.expand_less, size: 16, color: AppColors.textSecondary),
+                                          SizedBox(width: 4),
+                                          Text(
+                                            'Maxilar Superior (Arcada Superior)',
+                                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
+                                          ),
+                                          SizedBox(width: 4),
+                                          Icon(Icons.expand_less, size: 16, color: AppColors.textSecondary),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 12),
 
-                                    // Piezas Superiores (18 - 28)
-                                    Wrap(
-                                      alignment: WrapAlignment.center,
-                                      spacing: 6,
-                                      runSpacing: 8,
-                                      children: _upperTeeth.map((tNum) {
-                                        final state = teeth[tNum] ?? DentalToothState(toothNumber: tNum);
-                                        final isSelected = provider.selectedTooth == tNum;
-                                        return _buildToothWidget(state, isSelected, () => provider.selectTooth(tNum));
-                                      }).toList(),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    const Divider(indent: 40, endIndent: 40),
-                                    const SizedBox(height: 12),
+                                      // Fila Superior: Cuadrante 1 (18-11) | Línea Media | Cuadrante 2 (21-28)
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment: CrossAxisAlignment.center,
+                                        children: [
+                                          // Cuadrante 1
+                                          Column(
+                                            children: [
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.grey.shade200,
+                                                  borderRadius: BorderRadius.circular(4),
+                                                ),
+                                                child: const Text('C1: Sup. Derecho', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                                              ),
+                                              const SizedBox(height: 6),
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [18, 17, 16, 15, 14, 13, 12, 11].map((tNum) {
+                                                  final state = teeth[tNum] ?? DentalToothState(toothNumber: tNum);
+                                                  return _buildToothWidget(state, provider.selectedTooth == tNum, () => _onToothSelected(tNum, provider));
+                                                }).toList(),
+                                              ),
+                                            ],
+                                          ),
 
-                                    // Piezas Inferiores (48 - 38)
-                                    Wrap(
-                                      alignment: WrapAlignment.center,
-                                      spacing: 6,
-                                      runSpacing: 8,
-                                      children: _lowerTeeth.map((tNum) {
-                                        final state = teeth[tNum] ?? DentalToothState(toothNumber: tNum);
-                                        final isSelected = provider.selectedTooth == tNum;
-                                        return _buildToothWidget(state, isSelected, () => provider.selectTooth(tNum));
-                                      }).toList(),
-                                    ),
-                                    const SizedBox(height: 16),
-                                    const Text(
-                                      'Mandíbula Inferior (Arcada Inferior)',
-                                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
-                                    ),
-                                  ],
+                                          // Línea Media Separadora Superior
+                                          Container(
+                                            height: 64,
+                                            width: 2,
+                                            margin: const EdgeInsets.symmetric(horizontal: 10),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.primaryBlue.withValues(alpha: 0.5),
+                                              borderRadius: BorderRadius.circular(1),
+                                            ),
+                                          ),
+
+                                          // Cuadrante 2
+                                          Column(
+                                            children: [
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.grey.shade200,
+                                                  borderRadius: BorderRadius.circular(4),
+                                                ),
+                                                child: const Text('C2: Sup. Izquierdo', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                                              ),
+                                              const SizedBox(height: 6),
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [21, 22, 23, 24, 25, 26, 27, 28].map((tNum) {
+                                                  final state = teeth[tNum] ?? DentalToothState(toothNumber: tNum);
+                                                  return _buildToothWidget(state, provider.selectedTooth == tNum, () => _onToothSelected(tNum, provider));
+                                                }).toList(),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+
+                                      const SizedBox(height: 14),
+                                      const Divider(height: 1, indent: 20, endIndent: 20),
+                                      const SizedBox(height: 14),
+
+                                      // Fila Inferior: Cuadrante 4 (48-41) | Línea Media | Cuadrante 3 (31-38)
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment: CrossAxisAlignment.center,
+                                        children: [
+                                          // Cuadrante 4
+                                          Column(
+                                            children: [
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [48, 47, 46, 45, 44, 43, 42, 41].map((tNum) {
+                                                  final state = teeth[tNum] ?? DentalToothState(toothNumber: tNum);
+                                                  return _buildToothWidget(state, provider.selectedTooth == tNum, () => _onToothSelected(tNum, provider));
+                                                }).toList(),
+                                              ),
+                                              const SizedBox(height: 6),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.grey.shade200,
+                                                  borderRadius: BorderRadius.circular(4),
+                                                ),
+                                                child: const Text('C4: Inf. Derecho', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                                              ),
+                                            ],
+                                          ),
+
+                                          // Línea Media Separadora Inferior
+                                          Container(
+                                            height: 64,
+                                            width: 2,
+                                            margin: const EdgeInsets.symmetric(horizontal: 10),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.primaryBlue.withValues(alpha: 0.5),
+                                              borderRadius: BorderRadius.circular(1),
+                                            ),
+                                          ),
+
+                                          // Cuadrante 3
+                                          Column(
+                                            children: [
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [31, 32, 33, 34, 35, 36, 37, 38].map((tNum) {
+                                                  final state = teeth[tNum] ?? DentalToothState(toothNumber: tNum);
+                                                  return _buildToothWidget(state, provider.selectedTooth == tNum, () => _onToothSelected(tNum, provider));
+                                                }).toList(),
+                                              ),
+                                              const SizedBox(height: 6),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.grey.shade200,
+                                                  borderRadius: BorderRadius.circular(4),
+                                                ),
+                                                child: const Text('C3: Inf. Izquierdo', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 12),
+                                      const Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(Icons.expand_more, size: 16, color: AppColors.textSecondary),
+                                          SizedBox(width: 4),
+                                          Text(
+                                            'Mandíbula Inferior (Arcada Inferior)',
+                                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
+                                          ),
+                                          SizedBox(width: 4),
+                                          Icon(Icons.expand_more, size: 16, color: AppColors.textSecondary),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ],
@@ -781,6 +936,7 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
           const Text('Condición / Diagnóstico Clínico', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
           const SizedBox(height: 6),
           DropdownButtonFormField<String>(
+            key: ValueKey('${provider.selectedTooth}_${provider.selectedCondition}'),
             initialValue: _conditionsList.contains(provider.selectedCondition)
                 ? provider.selectedCondition
                 : _conditionsList.first,
@@ -934,7 +1090,27 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
                       return;
                     }
 
+                    ToothCondition cond;
+                    final condLower = provider.selectedCondition.toLowerCase();
+                    if (condLower.contains('caries')) {
+                      cond = ToothCondition.caries;
+                    } else if (condLower.contains('trata') ||
+                        condLower.contains('restor') ||
+                        condLower.contains('obtur') ||
+                        condLower.contains('corona') ||
+                        condLower.contains('conducto') ||
+                        condLower.contains('endodoncia') ||
+                        condLower.contains('incrusta')) {
+                      cond = ToothCondition.treated;
+                    } else if (condLower.contains('ausen') || condLower.contains('extrac') || condLower.contains('perdid')) {
+                      cond = ToothCondition.missing;
+                    } else {
+                      cond = ToothCondition.healthy;
+                    }
+
                     final success = await provider.addFinding(
+                      toothNumber: provider.selectedTooth,
+                      condition: cond,
                       procedureName: _procedureController.text.trim().isNotEmpty
                           ? _procedureController.text.trim()
                           : 'Evaluación y Diagnóstico',
@@ -954,7 +1130,7 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
                           content: Text(success
                               ? 'Hallazgo y procedimiento guardado en Supabase con éxito.'
                               : 'Hallazgo registrado.'),
-                          backgroundColor: AppColors.success,
+                          backgroundColor: success ? AppColors.success : AppColors.warning,
                           behavior: SnackBarBehavior.floating,
                         ),
                       );
@@ -1431,9 +1607,14 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
                     final cLower = selectedCondition.toLowerCase();
                     if (cLower.contains('caries')) {
                       cond = ToothCondition.caries;
-                    } else if (cLower.contains('trata') || cLower.contains('corona')) {
+                    } else if (cLower.contains('trata') ||
+                        cLower.contains('corona') ||
+                        cLower.contains('obtur') ||
+                        cLower.contains('conducto') ||
+                        cLower.contains('endodoncia') ||
+                        cLower.contains('incrusta')) {
                       cond = ToothCondition.treated;
-                    } else if (cLower.contains('ausen') || cLower.contains('extrac')) {
+                    } else if (cLower.contains('ausen') || cLower.contains('extrac') || cLower.contains('perdid')) {
                       cond = ToothCondition.missing;
                     } else {
                       cond = ToothCondition.healthy;
@@ -1489,6 +1670,17 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
     int editTooth = log.toothNumber;
     String editStatus = (log.status == 'Completed' || log.status == 'Completado') ? 'Completado' : 'Pendiente';
     final Set<String> editSurfaces = Set.from(log.surfaces);
+    String editCondition = 'Tratado / Restaurado';
+    if (log.condition != null) {
+      final logC = log.condition!.toLowerCase();
+      if (logC.contains('caries')) {
+        editCondition = 'Caries Activa / Esmalte';
+      } else if (logC.contains('ausen') || logC.contains('miss') || logC.contains('extrac')) {
+        editCondition = 'Ausente / Extracción Previa';
+      } else if (logC.contains('sano') || logC.contains('healthy')) {
+        editCondition = 'Sano / Sin Patología';
+      }
+    }
 
     showDialog(
       context: context,
@@ -1529,6 +1721,23 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
                         }).toList(),
                         onChanged: (v) {
                           if (v != null) setEditState(() => editTooth = v);
+                        },
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Diagnóstico / Condición Clínica
+                      const Text('Diagnóstico / Condición', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      DropdownButtonFormField<String>(
+                        initialValue: editCondition,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        items: _conditionsList.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 11)))).toList(),
+                        onChanged: (v) {
+                          if (v != null) setEditState(() => editCondition = v);
                         },
                       ),
                       const SizedBox(height: 14),
@@ -1624,9 +1833,21 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryBlue),
                   onPressed: () async {
-                    ToothCondition cond = ToothCondition.treated;
-                    if (editStatus == 'Pendiente') {
+                    ToothCondition cond;
+                    final cLower = editCondition.toLowerCase();
+                    if (cLower.contains('caries')) {
                       cond = ToothCondition.caries;
+                    } else if (cLower.contains('trata') ||
+                        cLower.contains('obtur') ||
+                        cLower.contains('corona') ||
+                        cLower.contains('endodoncia') ||
+                        cLower.contains('conducto') ||
+                        cLower.contains('incrusta')) {
+                      cond = ToothCondition.treated;
+                    } else if (cLower.contains('ausen') || cLower.contains('extrac') || cLower.contains('perdid')) {
+                      cond = ToothCondition.missing;
+                    } else {
+                      cond = ToothCondition.healthy;
                     }
 
                     await provider.updateFinding(
@@ -1737,49 +1958,57 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
   }
 
   Widget _buildToothWidget(DentalToothState state, bool isSelected, VoidCallback onTap) {
-    Color fill;
-    switch (state.condition) {
-      case ToothCondition.caries:
-        fill = AppColors.danger;
-        break;
-      case ToothCondition.treated:
-        fill = AppColors.primaryBlue;
-        break;
-      case ToothCondition.missing:
-        fill = Colors.grey.shade400;
-        break;
-      case ToothCondition.healthy:
-        fill = AppColors.white;
-        break;
-    }
+    final tNum = state.toothNumber;
+    final isUpper = _upperTeeth.contains(tNum);
+
+    String condLabel = 'Sano';
+    if (state.condition == ToothCondition.caries) condLabel = 'Caries';
+    if (state.condition == ToothCondition.treated) condLabel = 'Tratado';
+    if (state.condition == ToothCondition.missing) condLabel = 'Ausente';
+
+    final surfStr = state.affectedSurfaces.isNotEmpty ? ' (${state.affectedSurfaces.join(",")})' : '';
+    final procStr = state.activeProcedure != null && state.activeProcedure!.isNotEmpty ? '\n${state.activeProcedure}' : '';
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(4),
+      borderRadius: BorderRadius.circular(6),
       child: Tooltip(
-        message: 'Pieza ${state.toothNumber}: ${_getToothDescription(state.toothNumber)}',
+        message: 'Pieza $tNum: ${_getToothDescription(tNum)}\nEstado: $condLabel$surfStr$procStr',
         child: Container(
-          width: 32,
-          padding: const EdgeInsets.symmetric(vertical: 4),
+          width: 36,
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
           decoration: BoxDecoration(
-            color: isSelected ? AppColors.primaryBlueLight.withValues(alpha: 0.2) : Colors.transparent,
-            borderRadius: BorderRadius.circular(4),
-            border: isSelected ? Border.all(color: AppColors.primaryBlue, width: 1.5) : null,
+            color: isSelected ? AppColors.primaryBlueLight.withValues(alpha: 0.18) : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+            border: isSelected
+                ? Border.all(color: AppColors.primaryBlue, width: 2)
+                : Border.all(color: Colors.transparent, width: 2),
           ),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                '${state.toothNumber}',
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                '$tNum',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                  color: isSelected ? AppColors.primaryBlue : AppColors.textPrimary,
+                ),
               ),
               const SizedBox(height: 4),
+              CustomPaint(
+                size: const Size(28, 28),
+                painter: ToothPainter(state: state, isUpper: isUpper),
+              ),
+              const SizedBox(height: 3),
               Container(
-                width: 22,
-                height: 22,
+                width: 5,
+                height: 5,
                 decoration: BoxDecoration(
-                  color: fill,
-                  borderRadius: BorderRadius.circular(3),
-                  border: Border.all(color: AppColors.border),
+                  shape: BoxShape.circle,
+                  color: state.activeProcedure != null && state.activeProcedure!.isNotEmpty
+                      ? (state.condition == ToothCondition.caries ? AppColors.danger : AppColors.primaryBlue)
+                      : Colors.transparent,
                 ),
               ),
             ],
@@ -1874,5 +2103,143 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
       case 48: return 'Tercer Molar / Cordal Inf. Der.';
       default: return 'Pieza Dental $tooth';
     }
+  }
+}
+
+/// CustomPainter para renderizar las 5 superficies anatómicas de cada pieza dental FDI
+class ToothPainter extends CustomPainter {
+  final DentalToothState state;
+  final bool isUpper;
+
+  ToothPainter({required this.state, required this.isUpper});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+
+    final borderPaint = Paint()
+      ..color = const Color(0xFF94A3B8)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+
+    final rrect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0, 0, w, h),
+      const Radius.circular(3),
+    );
+
+    // Si la pieza está ausente / extraída, dibuja una "X" roja/oscura sobre fondo suave
+    if (state.condition == ToothCondition.missing) {
+      final bgPaint = Paint()
+        ..color = const Color(0xFFF1F5F9)
+        ..style = PaintingStyle.fill;
+      canvas.drawRRect(rrect, bgPaint);
+      canvas.drawRRect(rrect, borderPaint);
+
+      final crossPaint = Paint()
+        ..color = const Color(0xFFEF4444)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.2
+        ..strokeCap = StrokeCap.round;
+
+      canvas.drawLine(const Offset(3, 3), Offset(w - 3, h - 3), crossPaint);
+      canvas.drawLine(Offset(w - 3, 3), Offset(3, h - 3), crossPaint);
+      return;
+    }
+
+    final tNum = state.toothNumber;
+    final isRightSideOfPatient = (tNum >= 11 && tNum <= 18) || (tNum >= 41 && tNum <= 48);
+
+    // Mapeo anatómico de superficies según la posición en la arcada dental
+    final topSurface = isUpper ? 'B' : 'L';
+    final bottomSurface = isUpper ? 'L' : 'B';
+    final leftSurface = isRightSideOfPatient ? 'D' : 'M';
+    final rightSurface = isRightSideOfPatient ? 'M' : 'D';
+
+    Color getSurfaceColor(String surfaceCode) {
+      if (state.condition == ToothCondition.healthy) {
+        return Colors.white;
+      }
+      final isAffected = state.affectedSurfaces.isEmpty ||
+          state.affectedSurfaces.any((s) {
+            final sUpper = s.toUpperCase();
+            if (surfaceCode == 'B') return sUpper == 'B' || sUpper == 'V';
+            if (surfaceCode == 'L') return sUpper == 'L' || sUpper == 'P';
+            return sUpper == surfaceCode;
+          });
+
+      if (!isAffected) return Colors.white;
+
+      if (state.condition == ToothCondition.caries) {
+        return const Color(0xFFEF4444); // Rojo para Caries activa
+      } else if (state.condition == ToothCondition.treated) {
+        return const Color(0xFF2563EB); // Azul para Tratado / Restaurado
+      }
+      return Colors.white;
+    }
+
+    final centerColor = getSurfaceColor('O');
+    final topColor = getSurfaceColor(topSurface);
+    final bottomColor = getSurfaceColor(bottomSurface);
+    final leftColor = getSurfaceColor(leftSurface);
+    final rightColor = getSurfaceColor(rightSurface);
+
+    final cLeft = w * 0.28;
+    final cTop = h * 0.28;
+    final cRight = w * 0.72;
+    final cBottom = h * 0.72;
+
+    // Superficie Superior (Vestibular o Lingual)
+    final topPath = Path()
+      ..moveTo(0, 0)
+      ..lineTo(w, 0)
+      ..lineTo(cRight, cTop)
+      ..lineTo(cLeft, cTop)
+      ..close();
+    canvas.drawPath(topPath, Paint()..color = topColor..style = PaintingStyle.fill);
+    canvas.drawPath(topPath, borderPaint);
+
+    // Superficie Inferior (Lingual o Vestibular)
+    final bottomPath = Path()
+      ..moveTo(cLeft, cBottom)
+      ..lineTo(cRight, cBottom)
+      ..lineTo(w, h)
+      ..lineTo(0, h)
+      ..close();
+    canvas.drawPath(bottomPath, Paint()..color = bottomColor..style = PaintingStyle.fill);
+    canvas.drawPath(bottomPath, borderPaint);
+
+    // Superficie Izquierda (Distal o Mesial)
+    final leftPath = Path()
+      ..moveTo(0, 0)
+      ..lineTo(cLeft, cTop)
+      ..lineTo(cLeft, cBottom)
+      ..lineTo(0, h)
+      ..close();
+    canvas.drawPath(leftPath, Paint()..color = leftColor..style = PaintingStyle.fill);
+    canvas.drawPath(leftPath, borderPaint);
+
+    // Superficie Derecha (Mesial o Distal)
+    final rightPath = Path()
+      ..moveTo(w, 0)
+      ..lineTo(w, h)
+      ..lineTo(cRight, cBottom)
+      ..lineTo(cRight, cTop)
+      ..close();
+    canvas.drawPath(rightPath, Paint()..color = rightColor..style = PaintingStyle.fill);
+    canvas.drawPath(rightPath, borderPaint);
+
+    // Superficie Central (Oclusal / Incisal)
+    final centerRect = Rect.fromLTRB(cLeft, cTop, cRight, cBottom);
+    canvas.drawRect(centerRect, Paint()..color = centerColor..style = PaintingStyle.fill);
+    canvas.drawRect(centerRect, borderPaint);
+
+    // Borde exterior
+    canvas.drawRRect(rrect, borderPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant ToothPainter oldDelegate) {
+    return oldDelegate.state != state || oldDelegate.isUpper != isUpper;
   }
 }

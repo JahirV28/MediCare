@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
@@ -592,8 +593,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildSecurity() {
     final user = context.watch<AuthProvider>().currentUser;
-    final osName = Platform.operatingSystem;
-    final osVersion = Platform.operatingSystemVersion;
+    final String systemInfo = kIsWeb
+        ? 'Navegador Web (Cliente Ligero)'
+        : '${Platform.operatingSystem.toUpperCase()} — ${Platform.operatingSystemVersion}';
 
     String lastLoginDisplay = 'Sesión iniciada';
     if (user?.lastLogin != null) {
@@ -642,7 +644,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 12),
               _buildInfoRow('Usuario conectado', '${user?.fullName ?? "Usuario"} (${user?.email ?? ""})'),
               _buildInfoRow('Rol y Cédula/ID', '${user?.roleName ?? "Doctor"} • ID: ${user?.providerId ?? "N/A"}'),
-              _buildInfoRow('Dispositivo / Sistema', '${osName.toUpperCase()} — $osVersion'),
+              _buildInfoRow('Dispositivo / Sistema', systemInfo),
               _buildInfoRow('Último acceso registrado', lastLoginDisplay),
             ],
           ),

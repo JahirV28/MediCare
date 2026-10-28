@@ -279,20 +279,20 @@ class OdontologyProvider extends ChangeNotifier {
       _selectedSurfaces.addAll(current.affectedSurfaces);
       switch (current.condition) {
         case ToothCondition.caries:
-          _selectedCondition = 'Caries';
+          _selectedCondition = 'Caries Activa / Esmalte';
           break;
         case ToothCondition.treated:
           _selectedCondition = 'Tratado / Restaurado';
           break;
         case ToothCondition.missing:
-          _selectedCondition = 'Ausente / Extracción';
+          _selectedCondition = 'Ausente / Extracción Previa';
           break;
         case ToothCondition.healthy:
-          _selectedCondition = 'Sano';
+          _selectedCondition = 'Sano / Sin Patología';
           break;
       }
     } else {
-      _selectedCondition = 'Sano';
+      _selectedCondition = 'Sano / Sin Patología';
     }
     notifyListeners();
   }
@@ -339,7 +339,10 @@ class OdontologyProvider extends ChangeNotifier {
           condLower.contains('restor') ||
           condLower.contains('treated') ||
           condLower.contains('corona') ||
-          condLower.contains('obtur')) {
+          condLower.contains('obtur') ||
+          condLower.contains('conducto') ||
+          condLower.contains('endodoncia') ||
+          condLower.contains('incrusta')) {
         resolvedCondition = ToothCondition.treated;
       } else if (condLower.contains('ausente') ||
           condLower.contains('extrac') ||

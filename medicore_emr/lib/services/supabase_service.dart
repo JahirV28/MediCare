@@ -843,11 +843,11 @@ class SupabaseService {
     int? providerId,
   }) async {
     try {
-      final docId = providerId ?? currentUserId ?? 9;
+      final docId = providerId ?? currentUserId ?? 1;
       final condStr = mapToothConditionToDb(condition);
       final dbStatus = (status == 'Completado' || status == 'Completed')
-          ? 'Completed'
-          : (status == 'Cancelado' || status == 'Cancelled' ? 'Cancelled' : 'Pending');
+          ? 'Completado'
+          : (status == 'Cancelado' || status == 'Cancelled' ? 'Cancelado' : 'Pending');
 
       final insertData = <String, dynamic>{
         'patient_id': patientId,
@@ -864,6 +864,24 @@ class SupabaseService {
       if (anesthesia != null && anesthesia.isNotEmpty) insertData['anesthesia'] = anesthesia;
 
       await _client.from('odontogram_findings').insert(insertData);
+
+      // Sincronizar en el historial clínico unificado (clinical_records) si está completado
+      if (dbStatus == 'Completado') {
+        try {
+          await _client.from('clinical_records').insert({
+            'patient_id': patientId,
+            'doctor_id': docId,
+            'record_type': 'Dental',
+            'title': 'Procedimiento Odontológico: ${procedureName.isNotEmpty ? procedureName : "Tratamiento Dental"}',
+            'description': 'Procedimiento realizado en la pieza FDI $toothNumber. Superficies: ${surfaces.isEmpty ? "Completa" : surfaces.join(", ")}. ${notes ?? ""}'.trim(),
+            'record_date': DateTime.now().toIso8601String(),
+            'tags': ['Odontología', 'Pieza $toothNumber'],
+          });
+        } catch (recErr) {
+          debugPrint('Aviso al sincronizar con historial clínico: $recErr');
+        }
+      }
+
       return true;
     } catch (e) {
       debugPrint('Error al guardar odontogram finding en Supabase: $e');
@@ -874,8 +892,8 @@ class SupabaseService {
   Future<bool> updateOdontogramStatus(int findingId, String status) async {
     try {
       final dbStatus = (status == 'Completado' || status == 'Completed')
-          ? 'Completed'
-          : (status == 'Cancelado' || status == 'Cancelled' ? 'Cancelled' : 'Pending');
+          ? 'Completado'
+          : (status == 'Cancelado' || status == 'Cancelled' ? 'Cancelado' : 'Pending');
 
       await _client
           .from('odontogram_findings')
@@ -905,8 +923,8 @@ class SupabaseService {
     try {
       final condStr = mapToothConditionToDb(condition);
       final dbStatus = (status == 'Completado' || status == 'Completed')
-          ? 'Completed'
-          : (status == 'Cancelado' || status == 'Cancelled' ? 'Cancelled' : 'Pending');
+          ? 'Completado'
+          : (status == 'Cancelado' || status == 'Cancelled' ? 'Cancelado' : 'Pending');
 
       final updateData = <String, dynamic>{
         'tooth_number': toothNumber,
