@@ -38,30 +38,37 @@ String formatPediatricAge(DateTime? birthDate, {DateTime? atDate}) {
 
 /// Estándares clínicos de Crecimiento Infantil de la Organización Mundial de la Salud (OMS 0-5 años)
 class WhoStandards {
-  static const List<double> months = [0, 6, 12, 18, 24, 30, 36, 42, 48, 54, 60];
+  // Puntos de referencia OMS a 0, 3, 6, 9, 12, 18, 24, 30, 36, 42, 48, 54, 60 meses
+  static const List<double> months = [0, 3, 6, 9, 12, 18, 24, 30, 36, 42, 48, 54, 60];
 
   // Peso (kg) para varones OMS
-  static const List<double> weightP3 = [2.5, 6.4, 7.7, 8.8, 9.7, 10.5, 11.3, 12.0, 12.7, 13.4, 14.1];
-  static const List<double> weightP50 = [3.3, 7.9, 9.6, 10.9, 12.2, 13.3, 14.3, 15.3, 16.3, 17.3, 18.3];
-  static const List<double> weightP97 = [4.4, 9.8, 12.0, 13.7, 15.3, 16.8, 18.3, 19.8, 21.2, 22.7, 24.2];
+  static const List<double> weightP3 =  [2.5, 5.0, 6.4, 7.1, 7.7,  8.8,  9.7, 10.5, 11.3, 12.0, 12.7, 13.4, 14.1];
+  static const List<double> weightP50 = [3.3, 6.4, 7.9, 8.9, 9.6, 10.9, 12.2, 13.3, 14.3, 15.3, 16.3, 17.3, 18.3];
+  static const List<double> weightP97 = [4.4, 8.0, 9.8, 11.0, 12.0, 13.7, 15.3, 16.8, 18.3, 19.8, 21.2, 22.7, 24.2];
 
   // Talla / Estatura (cm) para varones OMS
-  static const List<double> heightP3 = [46.1, 63.6, 71.0, 76.9, 81.7, 86.0, 89.9, 93.1, 96.1, 98.4, 100.7];
-  static const List<double> heightP50 = [49.9, 67.6, 75.7, 82.3, 87.1, 91.9, 96.1, 99.7, 103.3, 106.7, 110.0];
-  static const List<double> heightP97 = [53.7, 71.6, 80.5, 87.7, 92.9, 98.0, 102.7, 106.7, 110.7, 114.6, 119.2];
+  static const List<double> heightP3 =  [46.1, 57.3, 63.6, 67.5, 71.0, 76.9, 81.7, 86.0, 89.9,  93.1,  96.1,  98.4, 100.7];
+  static const List<double> heightP50 = [49.9, 61.4, 67.6, 72.0, 75.7, 82.3, 87.1, 91.9, 96.1,  99.7, 103.3, 106.7, 110.0];
+  static const List<double> heightP97 = [53.7, 65.5, 71.6, 76.5, 80.5, 87.7, 92.9, 98.0, 102.7, 106.7, 110.7, 114.6, 119.2];
 
   // Perímetro Cefálico (cm) para varones OMS
-  static const List<double> headP3 = [31.9, 41.0, 43.5, 44.8, 45.8, 46.5, 47.0, 47.5, 47.9, 48.2, 48.5];
-  static const List<double> headP50 = [34.5, 43.3, 46.1, 47.4, 48.3, 48.9, 49.5, 50.0, 50.4, 50.7, 51.0];
-  static const List<double> headP97 = [37.0, 45.8, 48.6, 49.9, 50.7, 51.4, 52.0, 52.4, 52.8, 53.2, 53.5];
+  static const List<double> headP3 =  [31.9, 38.1, 41.0, 42.5, 43.5, 44.8, 45.8, 46.5, 47.0, 47.5, 47.9, 48.2, 48.5];
+  static const List<double> headP50 = [34.5, 40.5, 43.3, 45.0, 46.1, 47.4, 48.3, 48.9, 49.5, 50.0, 50.4, 50.7, 51.0];
+  static const List<double> headP97 = [37.0, 42.9, 45.8, 47.5, 48.6, 49.9, 50.7, 51.4, 52.0, 52.4, 52.8, 53.2, 53.5];
 
   static double interpolate(List<double> values, double m) {
-    if (m <= 0) return values.first;
-    if (m >= 60) return values.last;
-    final idx = (m / 6.0).floor();
-    if (idx >= values.length - 1) return values.last;
-    final frac = (m - idx * 6.0) / 6.0;
-    return values[idx] + (values[idx + 1] - values[idx]) * frac;
+    if (m <= months.first) return values.first;
+    if (m >= months.last) return values.last;
+    for (int i = 0; i < months.length - 1; i++) {
+      if (m >= months[i] && m <= months[i + 1]) {
+        final span = months[i + 1] - months[i];
+        final frac = (m - months[i]) / span;
+        // Interpolación suavizada (Hermite Smoothstep) para eliminar quiebres bruscos
+        final smoothFrac = frac * frac * (3 - 2 * frac);
+        return values[i] + (values[i + 1] - values[i]) * smoothFrac;
+      }
+    }
+    return values.last;
   }
 
   static int calculatePercentile(double value, double m, String metric) {
@@ -131,19 +138,25 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
         return;
       }
 
-      // Si ya hay un paciente seleccionado y tiene id, cargamos sus datos
-      if (patientProv.selectedPatient != null && patientProv.selectedPatient!.id != null) {
-        await pediaProv.loadGrowthData(patientProv.selectedPatient!.id!);
-        return;
-      }
-
-      // Si la lista de pacientes está vacía, cargarla de la base de datos
       if (patientProv.patients.isEmpty) {
         await patientProv.loadPatients();
       }
 
+      // Comprobar si el paciente seleccionado actualmente es realmente pediátrico (<= 12 años)
+      final current = patientProv.selectedPatient;
+      final isChild = current != null && (
+        current.id == 8 ||
+        (current.age != null && current.age! <= 12) ||
+        (current.birthDate != null && DateTime.now().difference(current.birthDate!).inDays < 4380)
+      );
+
+      if (isChild && current.id != null) {
+        await pediaProv.loadGrowthData(current.id!);
+        return;
+      }
+
+      // Si el paciente actual es adulto o no hay paciente seleccionado, cargar a Mateo García (ID 8)
       if (patientProv.patients.isNotEmpty) {
-        // Seleccionar preferentemente al paciente pediátrico modelo Mateo García (ID 8) o el primer niño
         final pediatricPatient = patientProv.patients.firstWhere(
           (p) => p.id == 8 || (p.age != null && p.age! <= 12) || p.fullName.toLowerCase().contains('mateo'),
           orElse: () => patientProv.patients.first,
@@ -159,6 +172,7 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
   @override
   Widget build(BuildContext context) {
     final activePatient = context.watch<PatientProvider>().selectedPatient;
+    final isAdult = activePatient != null && activePatient.age != null && activePatient.age! > 12;
 
     return Consumer<PediatricsProvider>(
       builder: (context, provider, _) {
@@ -199,7 +213,51 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
               else
                 _buildActivePatientBanner(context, activePatient, provider, records),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
+
+              // Alerta clínica si el paciente activo es un adulto
+              if (isAdult)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 20),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFFBEB),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFFDE68A)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline, color: Color(0xFFD97706), size: 22),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Aviso Clínico: ${activePatient.fullName} (${activePatient.age} años) es un paciente adulto. Las curvas de la OMS aplican para población pediátrica (0 a 5 años).',
+                          style: const TextStyle(fontSize: 13, color: Color(0xFF92400E), fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primaryBlue,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        ),
+                        onPressed: () async {
+                          final patientProv = context.read<PatientProvider>();
+                          final mateo = patientProv.patients.firstWhere(
+                            (p) => p.id == 8 || p.fullName.toLowerCase().contains('mateo'),
+                            orElse: () => patientProv.patients.first,
+                          );
+                          patientProv.selectPatient(mateo);
+                          if (mateo.id != null) {
+                            await context.read<PediatricsProvider>().loadGrowthData(mateo.id!);
+                          }
+                        },
+                        icon: const Icon(Icons.child_care, size: 16),
+                        label: const Text('Ver Mateo García (Pediátrico)'),
+                      ),
+                    ],
+                  ),
+                ),
 
               // Encabezado con selector de métrica y botón de PDF
               Row(
@@ -332,18 +390,25 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
                               ),
                               Row(
                                 children: [
-                                  _legendPill(AppColors.success, '— P50 (Mediana OMS)'),
+                                  _legendPill(const Color(0xFF10B981), '— P50 (Mediana OMS)'),
                                   const SizedBox(width: 14),
-                                  _legendPill(AppColors.warning, '— P3 / P97 Límites'),
+                                  _legendPill(const Color(0xFFF59E0B), '— P3 / P97 Límites'),
                                   const SizedBox(width: 14),
                                   _legendPill(AppColors.primaryBlue, '● Mediciones Paciente'),
                                 ],
                               ),
                             ],
                           ),
-                          const SizedBox(height: 20),
 
-                          // Custom Painter para curvas y puntos
+                          // Barra de inspección activa de la medición seleccionada (sin tapar el gráfico)
+                          if (records.isNotEmpty && _selectedPointIndex < records.length) ...[
+                            const SizedBox(height: 14),
+                            _buildActiveInspectionPill(records[_selectedPointIndex], selectedMetric),
+                          ],
+
+                          const SizedBox(height: 16),
+
+                          // Custom Painter para curvas y puntos con spline suave
                           SizedBox(
                             height: 380,
                             width: double.infinity,
@@ -357,19 +422,12 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
                                     selectedIndex: _selectedPointIndex,
                                   ),
                                 ),
-                                // Tooltip interactivo con datos de la medición seleccionada
-                                if (records.isNotEmpty && _selectedPointIndex < records.length)
-                                  Positioned(
-                                    top: 15,
-                                    right: 20,
-                                    child: _buildTooltip(records[_selectedPointIndex], selectedMetric),
-                                  ),
                                 if (records.isEmpty)
                                   Center(
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                                       decoration: BoxDecoration(
-                                        color: Colors.white.withValues(alpha: 0.9),
+                                        color: Colors.white.withValues(alpha: 0.95),
                                         borderRadius: BorderRadius.circular(8),
                                         border: Border.all(color: AppColors.border),
                                         boxShadow: const [
@@ -382,7 +440,7 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
                                           Icon(Icons.info_outline, size: 18, color: AppColors.primaryBlue),
                                           SizedBox(width: 8),
                                           Text(
-                                            'Sin mediciones registradas. Agregue un control antropométrico con el botón (+).',
+                                            'Sin mediciones registradas. Agregue un control antropométrico con el botón (+ Medición).',
                                             style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
                                           ),
                                         ],
@@ -838,46 +896,42 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
     );
   }
 
-  Widget _buildTooltip(GrowthRecord record, String metric) {
-    String metricLabel;
-    if (metric.contains('Peso')) {
-      metricLabel = '${record.weightKg} kg (Percentil ${record.weightPercentile})';
-    } else if (metric.contains('Estatura')) {
-      metricLabel = '${record.heightCm.toStringAsFixed(1)} cm (Percentil ${record.heightPercentile})';
-    } else {
-      metricLabel = 'PC: ${record.headCircumferenceCm.toStringAsFixed(1)} cm (Normocéfalo)';
-    }
-
+  Widget _buildActiveInspectionPill(GrowthRecord record, String metric) {
     final monthName = _spanishMonths[record.date.month - 1];
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(8),
-        boxShadow: const [
-          BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 3)),
-        ],
+        border: Border.all(color: AppColors.primaryBlue.withValues(alpha: 0.3)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            metricLabel,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.white),
+          Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(color: AppColors.primaryBlue, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Control: ${record.date.day} $monthName ${record.date.year} (${record.ageLabel.isNotEmpty ? record.ageLabel : "${record.ageMonths.toInt()}m"})',
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+              ),
+            ],
           ),
-          const SizedBox(height: 2),
-          Text(
-            '${record.date.day} $monthName, ${record.date.year} (${record.ageLabel.isNotEmpty ? record.ageLabel : "${record.ageMonths.toInt()}m"})',
-            style: const TextStyle(fontSize: 10, color: Colors.white70),
+          Row(
+            children: [
+              Text('Peso: ${record.weightKg} kg (P${record.weightPercentile})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primaryBlue)),
+              const SizedBox(width: 14),
+              Text('Talla: ${record.heightCm.toStringAsFixed(1)} cm (P${record.heightPercentile})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.success)),
+              const SizedBox(width: 14),
+              Text('PC: ${record.headCircumferenceCm.toStringAsFixed(1)} cm', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+            ],
           ),
-          if (record.notes != null && record.notes!.isNotEmpty) ...[
-            const SizedBox(height: 2),
-            Text(
-              'Obs: ${record.notes}',
-              style: const TextStyle(fontSize: 10, color: Colors.white70, fontStyle: FontStyle.italic),
-            ),
-          ],
         ],
       ),
     );
@@ -1140,7 +1194,7 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
                     final weight = double.tryParse(weightController.text) ?? 14.0;
                     final height = double.tryParse(heightController.text) ?? 92.0;
                     final head = double.tryParse(headController.text) ?? 49.0;
-                    final months = double.tryParse(ageMonthsController.text) ?? initMonths;
+                    final months = (double.tryParse(ageMonthsController.text) ?? initMonths).clamp(0.0, 60.0);
 
                     final wPerc = WhoStandards.calculatePercentile(weight, months, 'Peso');
                     final hPerc = WhoStandards.calculatePercentile(height, months, 'Estatura');
@@ -1273,7 +1327,7 @@ class _PediatricsGrowthScreenState extends State<PediatricsGrowthScreen> {
   }
 }
 
-// ─── Lienzo Dinámico de Gráficas de Crecimiento OMS (Peso, Talla, Perímetro) ───
+// ─── Lienzo Dinámico y Suavizado de Gráficas de Crecimiento OMS (Catmull-Rom Spline) ───
 class _WhoGrowthChartPainter extends CustomPainter {
   final List<GrowthRecord> records;
   final String selectedMetric;
@@ -1285,12 +1339,86 @@ class _WhoGrowthChartPainter extends CustomPainter {
     this.selectedIndex = 0,
   });
 
+  /// Trazo de curva spline Catmull-Rom de alta fidelidad matemática
+  static Path buildSpline(List<Offset> points) {
+    final path = Path();
+    if (points.isEmpty) return path;
+    if (points.length == 1) {
+      path.moveTo(points[0].dx, points[0].dy);
+      return path;
+    }
+    if (points.length == 2) {
+      path.moveTo(points[0].dx, points[0].dy);
+      path.lineTo(points[1].dx, points[1].dy);
+      return path;
+    }
+
+    path.moveTo(points[0].dx, points[0].dy);
+    for (int i = 0; i < points.length - 1; i++) {
+      final p0 = i > 0 ? points[i - 1] : points[i];
+      final p1 = points[i];
+      final p2 = points[i + 1];
+      final p3 = i + 2 < points.length ? points[i + 2] : p2;
+
+      final cp1x = p1.dx + (p2.dx - p0.dx) / 6.0;
+      final cp1y = p1.dy + (p2.dy - p0.dy) / 6.0;
+      final cp2x = p2.dx - (p3.dx - p1.dx) / 6.0;
+      final cp2y = p2.dy - (p3.dy - p1.dy) / 6.0;
+
+      path.cubicTo(cp1x, cp1y, cp2x, cp2y, p2.dx, p2.dy);
+    }
+    return path;
+  }
+
+  /// Trazo de banda de normalidad sombreada entre P97 y P3
+  static Path buildBand(List<Offset> top, List<Offset> bottom) {
+    final path = Path();
+    if (top.isEmpty || bottom.isEmpty) return path;
+
+    path.moveTo(top[0].dx, top[0].dy);
+    for (int i = 0; i < top.length - 1; i++) {
+      final p0 = i > 0 ? top[i - 1] : top[i];
+      final p1 = top[i];
+      final p2 = top[i + 1];
+      final p3 = i + 2 < top.length ? top[i + 2] : p2;
+
+      final cp1x = p1.dx + (p2.dx - p0.dx) / 6.0;
+      final cp1y = p1.dy + (p2.dy - p0.dy) / 6.0;
+      final cp2x = p2.dx - (p3.dx - p1.dx) / 6.0;
+      final cp2y = p2.dy - (p3.dy - p1.dy) / 6.0;
+
+      path.cubicTo(cp1x, cp1y, cp2x, cp2y, p2.dx, p2.dy);
+    }
+
+    path.lineTo(bottom.last.dx, bottom.last.dy);
+
+    for (int i = bottom.length - 1; i > 0; i--) {
+      final p0 = i < bottom.length - 1 ? bottom[i + 1] : bottom[i];
+      final p1 = bottom[i];
+      final p2 = bottom[i - 1];
+      final p3 = i - 2 >= 0 ? bottom[i - 2] : p2;
+
+      final cp1x = p1.dx + (p2.dx - p0.dx) / 6.0;
+      final cp1y = p1.dy + (p2.dy - p0.dy) / 6.0;
+      final cp2x = p2.dx - (p3.dx - p1.dx) / 6.0;
+      final cp2y = p2.dy - (p3.dy - p1.dy) / 6.0;
+
+      path.cubicTo(cp1x, cp1y, cp2x, cp2y, p2.dx, p2.dy);
+    }
+
+    path.close();
+    return path;
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
-    const double paddingLeft = 50;
-    const double paddingBottom = 30;
-    final double chartWidth = size.width - paddingLeft - 20;
-    final double chartHeight = size.height - paddingBottom - 20;
+    const double paddingLeft = 55;
+    const double paddingRight = 25;
+    const double paddingBottom = 35;
+    const double paddingTop = 25;
+
+    final double chartWidth = size.width - paddingLeft - paddingRight;
+    final double chartHeight = size.height - paddingBottom - paddingTop;
 
     final gridPaint = Paint()
       ..color = AppColors.borderLight
@@ -1298,7 +1426,6 @@ class _WhoGrowthChartPainter extends CustomPainter {
 
     final axisTextPaint = TextPainter(textDirection: TextDirection.ltr);
 
-    // Configuración según la métrica seleccionada
     final bool isWeight = selectedMetric.contains('Peso');
     final bool isHeight = selectedMetric.contains('Estatura');
 
@@ -1307,50 +1434,48 @@ class _WhoGrowthChartPainter extends CustomPainter {
 
     if (isWeight) {
       yMin = 0.0;
-      yMax = 24.0;
-      yLabels = ['0kg', '3kg', '6kg', '9kg', '12kg', '15kg', '18kg', '21kg', '24kg'];
+      yMax = 25.0;
+      yLabels = ['0 kg', '5 kg', '10 kg', '15 kg', '20 kg', '25 kg'];
     } else if (isHeight) {
-      yMin = 40.0;
+      yMin = 45.0;
       yMax = 125.0;
-      yLabels = ['40cm', '50cm', '60cm', '70cm', '80cm', '90cm', '100cm', '110cm', '120cm'];
+      yLabels = ['45 cm', '60 cm', '75 cm', '90 cm', '105 cm', '120 cm'];
     } else {
-      // Perímetro Cefálico
       yMin = 30.0;
       yMax = 55.0;
-      yLabels = ['30cm', '35cm', '40cm', '45cm', '50cm', '55cm'];
+      yLabels = ['30 cm', '35 cm', '40 cm', '45 cm', '50 cm', '55 cm'];
     }
 
     // Dibujar líneas y etiquetas del eje Y
     for (int i = 0; i < yLabels.length; i++) {
-      final y = size.height - paddingBottom - (i * (chartHeight / (yLabels.length - 1)));
-      canvas.drawLine(Offset(paddingLeft, y), Offset(size.width - 20, y), gridPaint);
+      final y = (size.height - paddingBottom) - (i * (chartHeight / (yLabels.length - 1)));
+      canvas.drawLine(Offset(paddingLeft, y), Offset(size.width - paddingRight, y), gridPaint);
 
       axisTextPaint.text = TextSpan(
         text: yLabels[i],
         style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
       );
       axisTextPaint.layout();
-      axisTextPaint.paint(canvas, Offset(5, y - 6));
+      axisTextPaint.paint(canvas, Offset(8, y - 6));
     }
 
     // Dibujar líneas y etiquetas del eje X (0 a 5 años = 0 a 60 meses)
-    const xLabels = ['Nacim', '1 año', '2 años', '3 años', '4 años', '5 años'];
+    const xLabels = ['Nacimiento', '1 año', '2 años', '3 años', '4 años', '5 años'];
     for (int i = 0; i < xLabels.length; i++) {
       final x = paddingLeft + (i * (chartWidth / (xLabels.length - 1)));
-      canvas.drawLine(Offset(x, 10), Offset(x, size.height - paddingBottom), gridPaint);
+      canvas.drawLine(Offset(x, paddingTop), Offset(x, size.height - paddingBottom), gridPaint);
 
       axisTextPaint.text = TextSpan(
         text: xLabels[i],
         style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
       );
       axisTextPaint.layout();
-      axisTextPaint.paint(canvas, Offset(x - 14, size.height - paddingBottom + 8));
+      axisTextPaint.paint(canvas, Offset(x - (i == 0 ? 0 : (i == xLabels.length - 1 ? 25 : 14)), size.height - paddingBottom + 8));
     }
 
-    // Función auxiliar para convertir un valor numérico Y a coordenada en píxeles
     double getYPixel(double val) {
       final normalized = ((val - yMin) / (yMax - yMin)).clamp(0.0, 1.0);
-      return size.height - paddingBottom - (normalized * chartHeight);
+      return (size.height - paddingBottom) - (normalized * chartHeight);
     }
 
     double getXPixel(double ageMonths) {
@@ -1358,7 +1483,7 @@ class _WhoGrowthChartPainter extends CustomPainter {
       return paddingLeft + (normalized * chartWidth);
     }
 
-    // Listas de referencia OMS
+    // Listas de referencia OMS según la métrica seleccionada
     List<double> p3List, p50List, p97List;
     if (isWeight) {
       p3List = WhoStandards.weightP3;
@@ -1374,146 +1499,82 @@ class _WhoGrowthChartPainter extends CustomPainter {
       p97List = WhoStandards.headP97;
     }
 
-    // Dibujar franja sombreada de normalidad OMS (entre P3 y P97)
-    final zonePath = Path();
-    for (int i = 0; i <= 60; i += 2) {
-      final m = i.toDouble();
-      final x = getXPixel(m);
-      final y = getYPixel(WhoStandards.interpolate(p97List, m));
-      if (i == 0) {
-        zonePath.moveTo(x, y);
-      } else {
-        zonePath.lineTo(x, y);
-      }
-    }
-    for (int i = 60; i >= 0; i -= 2) {
-      final m = i.toDouble();
-      final x = getXPixel(m);
-      final y = getYPixel(WhoStandards.interpolate(p3List, m));
-      zonePath.lineTo(x, y);
-    }
-    zonePath.close();
+    // Puntos de spline interpolados
+    final p3Offsets = <Offset>[];
+    final p50Offsets = <Offset>[];
+    final p97Offsets = <Offset>[];
 
-    final zonePaint = Paint()
-      ..color = const Color(0x0E10B981)
+    for (int i = 0; i < WhoStandards.months.length; i++) {
+      final m = WhoStandards.months[i];
+      final x = getXPixel(m);
+      p3Offsets.add(Offset(x, getYPixel(p3List[i])));
+      p50Offsets.add(Offset(x, getYPixel(p50List[i])));
+      p97Offsets.add(Offset(x, getYPixel(p97List[i])));
+    }
+
+    // 1. Franja sombreada de normalidad OMS (entre P3 y P97)
+    final bandPath = buildBand(p97Offsets, p3Offsets);
+    final bandPaint = Paint()
+      ..color = const Color(0x1510B981) // Verde esmeralda suave traslúcido
       ..style = PaintingStyle.fill;
-    canvas.drawPath(zonePath, zonePaint);
+    canvas.drawPath(bandPath, bandPaint);
 
-    // Curva P3 OMS (Amarillo / Naranja límite inferior)
-    final p3Paint = Paint()
-      ..color = AppColors.warning.withValues(alpha: 0.8)
-      ..strokeWidth = 1.5
+    // 2. Curvas de Límites P3 y P97 (Ámbar suave)
+    final pBoundsPaint = Paint()
+      ..color = const Color(0xFFF59E0B)
+      ..strokeWidth = 1.6
       ..style = PaintingStyle.stroke;
-    final p3Path = Path();
-    for (int i = 0; i <= 60; i += 2) {
-      final m = i.toDouble();
-      final x = getXPixel(m);
-      final y = getYPixel(WhoStandards.interpolate(p3List, m));
-      if (i == 0) {
-        p3Path.moveTo(x, y);
-      } else {
-        p3Path.lineTo(x, y);
-      }
-    }
-    canvas.drawPath(p3Path, p3Paint);
+    canvas.drawPath(buildSpline(p3Offsets), pBoundsPaint);
+    canvas.drawPath(buildSpline(p97Offsets), pBoundsPaint);
 
-    // Curva P97 OMS (Amarillo / Naranja límite superior)
-    final p97Paint = Paint()
-      ..color = AppColors.warning.withValues(alpha: 0.8)
-      ..strokeWidth = 1.5
-      ..style = PaintingStyle.stroke;
-    final p97Path = Path();
-    for (int i = 0; i <= 60; i += 2) {
-      final m = i.toDouble();
-      final x = getXPixel(m);
-      final y = getYPixel(WhoStandards.interpolate(p97List, m));
-      if (i == 0) {
-        p97Path.moveTo(x, y);
-      } else {
-        p97Path.lineTo(x, y);
-      }
-    }
-    canvas.drawPath(p97Path, p97Paint);
-
-    // Curva P50 OMS (Mediana Verde)
+    // 3. Curva P50 OMS Mediana (Verde Esmeralda sólido)
     final p50Paint = Paint()
-      ..color = AppColors.success.withValues(alpha: 0.9)
-      ..strokeWidth = 2.2
+      ..color = const Color(0xFF10B981)
+      ..strokeWidth = 2.4
       ..style = PaintingStyle.stroke;
-    final p50Path = Path();
-    for (int i = 0; i <= 60; i += 2) {
-      final m = i.toDouble();
-      final x = getXPixel(m);
-      final y = getYPixel(WhoStandards.interpolate(p50List, m));
-      if (i == 0) {
-        p50Path.moveTo(x, y);
-      } else {
-        p50Path.lineTo(x, y);
-      }
-    }
-    canvas.drawPath(p50Path, p50Paint);
+    canvas.drawPath(buildSpline(p50Offsets), p50Paint);
 
-    // Mediciones Reales del Paciente
+    // 4. Trayectoria y mediciones del paciente
     if (records.isNotEmpty) {
-      final patientLinePaint = Paint()
-        ..color = AppColors.primaryBlue
-        ..strokeWidth = 2.5
-        ..style = PaintingStyle.stroke;
-
-      final pointFillPaint = Paint()..color = AppColors.white;
-      final pointStrokePaint = Paint()
-        ..color = AppColors.primaryBlue
-        ..strokeWidth = 2.5
-        ..style = PaintingStyle.stroke;
-
-      final selectedRingPaint = Paint()
-        ..color = AppColors.primaryBlue.withValues(alpha: 0.25)
-        ..style = PaintingStyle.fill;
-
-      final patientPath = Path();
-      final points = <Map<String, dynamic>>[];
-
-      // Ordenar cronológicamente por edad en meses para trazar la línea continua
       final sorted = List<GrowthRecord>.from(records)..sort((a, b) => a.ageMonths.compareTo(b.ageMonths));
-      for (int i = 0; i < sorted.length; i++) {
-        final r = sorted[i];
-        final x = getXPixel(r.ageMonths);
+      final patientOffsets = <Offset>[];
 
-        double val;
-        if (isWeight) {
-          val = r.weightKg;
-        } else if (isHeight) {
-          val = r.heightCm;
-        } else {
-          val = r.headCircumferenceCm;
-        }
-
-        final y = getYPixel(val);
-        points.add({'offset': Offset(x, y), 'record': r});
-
-        if (i == 0) {
-          patientPath.moveTo(x, y);
-        } else {
-          patientPath.lineTo(x, y);
-        }
+      for (final r in sorted) {
+        final val = isWeight ? r.weightKg : (isHeight ? r.heightCm : r.headCircumferenceCm);
+        patientOffsets.add(Offset(getXPixel(r.ageMonths), getYPixel(val)));
       }
 
-      canvas.drawPath(patientPath, patientLinePaint);
+      // Línea continua conectando mediciones
+      if (patientOffsets.length >= 2) {
+        final patientLinePaint = Paint()
+          ..color = AppColors.primaryBlue
+          ..strokeWidth = 2.8
+          ..style = PaintingStyle.stroke;
+        canvas.drawPath(buildSpline(patientOffsets), patientLinePaint);
+      }
 
       final activeRecord = (selectedIndex >= 0 && selectedIndex < records.length) ? records[selectedIndex] : null;
 
-      for (final p in points) {
-        final pt = p['offset'] as Offset;
-        final r = p['record'] as GrowthRecord;
+      // Marcadores circulares en cada punto
+      for (int i = 0; i < sorted.length; i++) {
+        final pt = patientOffsets[i];
+        final r = sorted[i];
         final isSelected = activeRecord != null && r.id == activeRecord.id;
 
         if (isSelected) {
-          canvas.drawCircle(pt, 10, selectedRingPaint);
-          canvas.drawCircle(pt, 6, pointStrokePaint);
-          canvas.drawCircle(pt, 4, Paint()..color = AppColors.primaryBlue);
+          canvas.drawCircle(pt, 12, Paint()..color = AppColors.primaryBlue.withValues(alpha: 0.20));
+          canvas.drawCircle(pt, 7, Paint()..color = AppColors.primaryBlue);
+          canvas.drawCircle(pt, 3.5, Paint()..color = Colors.white);
         } else {
-          canvas.drawCircle(pt, 5, pointFillPaint);
-          canvas.drawCircle(pt, 5, pointStrokePaint);
+          canvas.drawCircle(pt, 5.5, Paint()..color = Colors.white);
+          canvas.drawCircle(
+            pt,
+            5.5,
+            Paint()
+              ..color = AppColors.primaryBlue
+              ..strokeWidth = 2.2
+              ..style = PaintingStyle.stroke,
+          );
         }
       }
     }
