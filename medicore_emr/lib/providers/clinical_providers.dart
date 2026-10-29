@@ -297,22 +297,74 @@ class OdontologyProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  ToothCondition get currentResolvedCondition {
+    final condLower = _selectedCondition.toLowerCase();
+    if (condLower.contains('caries')) {
+      return ToothCondition.caries;
+    } else if (condLower.contains('tratado') ||
+        condLower.contains('trata') ||
+        condLower.contains('restor') ||
+        condLower.contains('treated') ||
+        condLower.contains('corona') ||
+        condLower.contains('obtur') ||
+        condLower.contains('conducto') ||
+        condLower.contains('endodoncia') ||
+        condLower.contains('incrusta')) {
+      return ToothCondition.treated;
+    } else if (condLower.contains('ausente') ||
+        condLower.contains('extrac') ||
+        condLower.contains('missing') ||
+        condLower.contains('perdid')) {
+      return ToothCondition.missing;
+    }
+    // Si la condición dice Sano pero hay caras seleccionadas, auto-promover a Caries
+    if (_selectedSurfaces.isNotEmpty) {
+      return ToothCondition.caries;
+    }
+    return ToothCondition.healthy;
+  }
+
   void toggleSurface(String surface) {
     if (_selectedSurfaces.contains(surface)) {
       _selectedSurfaces.remove(surface);
+      if (_selectedSurfaces.isEmpty && !_selectedCondition.toLowerCase().contains('ausen')) {
+        _selectedCondition = 'Sano / Sin Patología';
+      }
     } else {
       _selectedSurfaces.add(surface);
+      // Si la condición actual está en Sano, promoverla automáticamente para que se coloree
+      if (_selectedCondition.toLowerCase().contains('sano')) {
+        _selectedCondition = 'Caries Activa / Esmalte';
+      }
+    }
+    notifyListeners();
+  }
+
+  void selectAllSurfaces() {
+    _selectedSurfaces.addAll(['M', 'O', 'D', 'B', 'L']);
+    if (_selectedCondition.toLowerCase().contains('sano')) {
+      _selectedCondition = 'Tratado / Restaurado';
     }
     notifyListeners();
   }
 
   void clearSelectedSurfaces() {
     _selectedSurfaces.clear();
+    _selectedCondition = 'Sano / Sin Patología';
     notifyListeners();
   }
 
   void setCondition(String condition) {
     _selectedCondition = condition;
+    final condLower = condition.toLowerCase();
+    if (condLower.contains('ausen') || condLower.contains('sano')) {
+      _selectedSurfaces.clear();
+    } else {
+      // Si se pasa a Caries o Tratado y no hay superficies, preseleccionar Oclusal por defecto
+      if (_selectedSurfaces.isEmpty) {
+        _selectedSurfaces.add('O');
+      }
+    }
     notifyListeners();
   }
 
@@ -337,25 +389,20 @@ class OdontologyProvider extends ChangeNotifier {
     if (condition != null) {
       resolvedCondition = condition;
     } else {
-      final condLower = _selectedCondition.toLowerCase();
-      if (condLower.contains('caries')) {
-        resolvedCondition = ToothCondition.caries;
-      } else if (condLower.contains('tratado') ||
-          condLower.contains('restor') ||
-          condLower.contains('treated') ||
-          condLower.contains('corona') ||
-          condLower.contains('obtur') ||
-          condLower.contains('conducto') ||
-          condLower.contains('endodoncia') ||
-          condLower.contains('incrusta')) {
-        resolvedCondition = ToothCondition.treated;
-      } else if (condLower.contains('ausente') ||
-          condLower.contains('extrac') ||
-          condLower.contains('missing') ||
-          condLower.contains('perdid')) {
-        resolvedCondition = ToothCondition.missing;
-      } else {
-        resolvedCondition = ToothCondition.healthy;
+      resolvedCondition = currentResolvedCondition;
+      // Auto-detectar si el procedimiento es de restauración
+      final procLower = procedureName.toLowerCase();
+      if (resolvedCondition == ToothCondition.healthy && surf.isNotEmpty) {
+        if (procLower.contains('obtur') ||
+            procLower.contains('resina') ||
+            procLower.contains('amalgama') ||
+            procLower.contains('corona') ||
+            procLower.contains('incrusta') ||
+            procLower.contains('endodoncia')) {
+          resolvedCondition = ToothCondition.treated;
+        } else {
+          resolvedCondition = ToothCondition.caries;
+        }
       }
     }
 
@@ -531,6 +578,39 @@ class PediatricsProvider extends ChangeNotifier {
     _records.sort((a, b) => b.date.compareTo(a.date));
     notifyListeners();
     return true;
+  }
+
+  Future<bool> updateRecord(GrowthRecord record) async {
+    if (record.id == null) return false;
+
+    final targetPatientId = record.patientId > 0 ? record.patientId : _currentPatientId;
+    final ok = await _api.updatePediatricGrowthRecord(
+      recordId: record.id!,
+      date: record.date,
+      ageLabel: record.ageLabel,
+      ageMonths: record.ageMonths,
+      weightKg: record.weightKg,
+      heightCm: record.heightCm,
+      headCircumferenceCm: record.headCircumferenceCm,
+      weightPercentile: record.weightPercentile,
+      heightPercentile: record.heightPercentile,
+      notes: record.notes,
+    );
+
+    if (ok) {
+      if (targetPatientId != null && targetPatientId > 0) {
+        await loadGrowthData(targetPatientId);
+      } else {
+        final idx = _records.indexWhere((r) => r.id == record.id);
+        if (idx != -1) {
+          _records[idx] = record;
+          _records.sort((a, b) => b.date.compareTo(a.date));
+          notifyListeners();
+        }
+      }
+      return true;
+    }
+    return false;
   }
 
   Future<bool> deleteRecord(int recordId) async {

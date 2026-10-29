@@ -19,7 +19,8 @@ class DiagnosticFilesScreen extends StatefulWidget {
 class _DiagnosticFilesScreenState extends State<DiagnosticFilesScreen> {
   int _currentPage = 1;
   double _zoomLevel = 1.0;
-  final TransformationController _transformationController = TransformationController();
+  final TransformationController _transformationController =
+      TransformationController();
 
   @override
   void dispose() {
@@ -49,14 +50,14 @@ class _DiagnosticFilesScreenState extends State<DiagnosticFilesScreen> {
   void _zoomIn() {
     setState(() {
       _zoomLevel = (_zoomLevel + 0.15).clamp(0.6, 2.5);
-      _transformationController.value = Matrix4.diagonal3Values(_zoomLevel, _zoomLevel, 1.0);
+      _transformationController.value = Matrix4.identity()..scale(_zoomLevel);
     });
   }
 
   void _zoomOut() {
     setState(() {
       _zoomLevel = (_zoomLevel - 0.15).clamp(0.6, 2.5);
-      _transformationController.value = Matrix4.diagonal3Values(_zoomLevel, _zoomLevel, 1.0);
+      _transformationController.value = Matrix4.identity()..scale(_zoomLevel);
     });
   }
 
@@ -71,7 +72,9 @@ class _DiagnosticFilesScreenState extends State<DiagnosticFilesScreen> {
   Widget build(BuildContext context) {
     final activePatient = context.watch<PatientProvider>().selectedPatient;
     final patientName = activePatient?.fullName ?? 'García, Ana';
-    final patientCode = activePatient?.patientCode.isNotEmpty == true ? '#${activePatient!.patientCode}' : '#EXP-84729';
+    final patientCode = activePatient?.patientCode.isNotEmpty == true
+        ? '#${activePatient!.patientCode}'
+        : '#EXP-84729';
     final bDate = activePatient?.birthDate;
     final birthDateStr = bDate != null
         ? 'F. Nac: ${bDate.day.toString().padLeft(2, '0')}/${bDate.month.toString().padLeft(2, '0')}/${bDate.year} (${activePatient?.age ?? 0} años)'
@@ -118,7 +121,10 @@ class _DiagnosticFilesScreenState extends State<DiagnosticFilesScreen> {
                       OutlinedButton(
                         onPressed: widget.onBack,
                         style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 14,
+                          ),
                         ),
                         child: const Text('VOLVER AL RESUMEN'),
                       ),
@@ -129,7 +135,10 @@ class _DiagnosticFilesScreenState extends State<DiagnosticFilesScreen> {
                         label: const Text('SUBIR ARCHIVO'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primaryBlue,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 14,
+                          ),
                         ),
                       ),
                     ],
@@ -153,19 +162,28 @@ class _DiagnosticFilesScreenState extends State<DiagnosticFilesScreen> {
                           borderRadius: BorderRadius.circular(12),
                           child: Container(
                             width: double.infinity,
-                            padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 36,
+                              horizontal: 20,
+                            ),
                             decoration: BoxDecoration(
                               color: AppColors.white,
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: AppColors.primaryBlue.withValues(alpha: 0.5),
+                                color: AppColors.primaryBlue.withValues(
+                                  alpha: 0.5,
+                                ),
                                 width: 1.5,
                                 strokeAlign: BorderSide.strokeAlignInside,
                               ),
                             ),
                             child: Column(
                               children: [
-                                Icon(Icons.cloud_upload_outlined, size: 48, color: AppColors.primaryBlue),
+                                Icon(
+                                  Icons.cloud_upload_outlined,
+                                  size: 48,
+                                  color: AppColors.primaryBlue,
+                                ),
                                 const SizedBox(height: 12),
                                 const Text(
                                   'Subir Archivos Diagnósticos',
@@ -207,15 +225,48 @@ class _DiagnosticFilesScreenState extends State<DiagnosticFilesScreen> {
                                   initialValue: provider.selectedCategory,
                                   isDense: true,
                                   decoration: const InputDecoration(
-                                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                    contentPadding: EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 8,
+                                    ),
                                     border: OutlineInputBorder(),
                                   ),
                                   items: const [
-                                    DropdownMenuItem(value: 'All Categories', child: Text('Todas las Categorías', style: TextStyle(fontSize: 13))),
-                                    DropdownMenuItem(value: 'Lab Results', child: Text('Resultados de Laboratorio', style: TextStyle(fontSize: 13))),
-                                    DropdownMenuItem(value: 'Imaging', child: Text('Imágenes Médicas', style: TextStyle(fontSize: 13))),
-                                    DropdownMenuItem(value: 'Referrals', child: Text('Interconsultas', style: TextStyle(fontSize: 13))),
-                                    DropdownMenuItem(value: 'Dermatology', child: Text('Dermatología', style: TextStyle(fontSize: 13))),
+                                    DropdownMenuItem(
+                                      value: 'All Categories',
+                                      child: Text(
+                                        'Todas las Categorías',
+                                        style: TextStyle(fontSize: 13),
+                                      ),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'Lab Results',
+                                      child: Text(
+                                        'Resultados de Laboratorio',
+                                        style: TextStyle(fontSize: 13),
+                                      ),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'Imaging',
+                                      child: Text(
+                                        'Imágenes Médicas',
+                                        style: TextStyle(fontSize: 13),
+                                      ),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'Referrals',
+                                      child: Text(
+                                        'Interconsultas',
+                                        style: TextStyle(fontSize: 13),
+                                      ),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'Dermatology',
+                                      child: Text(
+                                        'Dermatología',
+                                        style: TextStyle(fontSize: 13),
+                                      ),
+                                    ),
                                   ],
                                   onChanged: (v) => provider.setCategory(v!),
                                 ),
@@ -232,24 +283,44 @@ class _DiagnosticFilesScreenState extends State<DiagnosticFilesScreen> {
                                       lastDate: DateTime.now(),
                                     );
                                     if (picked != null && context.mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
                                         SnackBar(
-                                          content: Text('Filtrando archivos por fecha: ${picked.day}/${picked.month}/${picked.year}'),
+                                          content: Text(
+                                            'Filtrando archivos por fecha: ${picked.day}/${picked.month}/${picked.year}',
+                                          ),
                                         ),
                                       );
                                     }
                                   },
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 8,
+                                    ),
                                     decoration: BoxDecoration(
-                                      border: Border.all(color: AppColors.border),
+                                      border: Border.all(
+                                        color: AppColors.border,
+                                      ),
                                       borderRadius: BorderRadius.circular(6),
                                     ),
                                     child: const Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
                                       children: [
-                                        Text('Filtrar por fecha', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                                        Icon(Icons.calendar_today, size: 14, color: AppColors.textHint),
+                                        Text(
+                                          'Filtrar por fecha',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: AppColors.textSecondary,
+                                          ),
+                                        ),
+                                        Icon(
+                                          Icons.calendar_today,
+                                          size: 14,
+                                          color: AppColors.textHint,
+                                        ),
                                       ],
                                     ),
                                   ),
@@ -258,11 +329,19 @@ class _DiagnosticFilesScreenState extends State<DiagnosticFilesScreen> {
                               const SizedBox(width: 12),
                               // Grid/List icons
                               IconButton(
-                                icon: const Icon(Icons.grid_view, size: 20, color: AppColors.primaryBlue),
+                                icon: const Icon(
+                                  Icons.grid_view,
+                                  size: 20,
+                                  color: AppColors.primaryBlue,
+                                ),
                                 onPressed: () {},
                               ),
                               IconButton(
-                                icon: const Icon(Icons.view_list, size: 20, color: AppColors.textHint),
+                                icon: const Icon(
+                                  Icons.view_list,
+                                  size: 20,
+                                  color: AppColors.textHint,
+                                ),
                                 onPressed: () {},
                               ),
                             ],
@@ -286,12 +365,15 @@ class _DiagnosticFilesScreenState extends State<DiagnosticFilesScreen> {
                                       color: AppColors.white,
                                       borderRadius: BorderRadius.circular(10),
                                       border: Border.all(
-                                        color: isSelected ? AppColors.primaryBlue : AppColors.border,
+                                        color: isSelected
+                                            ? AppColors.primaryBlue
+                                            : AppColors.border,
                                         width: isSelected ? 2 : 1,
                                       ),
                                     ),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         // Icon or thumbnail image
                                         Container(
@@ -299,33 +381,49 @@ class _DiagnosticFilesScreenState extends State<DiagnosticFilesScreen> {
                                           width: double.infinity,
                                           decoration: BoxDecoration(
                                             color: AppColors.background,
-                                            borderRadius: BorderRadius.circular(6),
+                                            borderRadius: BorderRadius.circular(
+                                              6,
+                                            ),
                                           ),
                                           alignment: Alignment.center,
                                           child: Icon(
                                             _iconForCategory(file.category),
                                             size: 36,
-                                            color: isSelected ? AppColors.primaryBlue : AppColors.textSecondary,
+                                            color: isSelected
+                                                ? AppColors.primaryBlue
+                                                : AppColors.textSecondary,
                                           ),
                                         ),
                                         const SizedBox(height: 8),
                                         Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
                                           children: [
                                             Expanded(
                                               child: Text(
                                                 file.fileName.split('.').first,
-                                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: AppColors.textPrimary,
+                                                ),
                                                 overflow: TextOverflow.ellipsis,
                                               ),
                                             ),
-                                            const Icon(Icons.more_vert, size: 16, color: AppColors.textHint),
+                                            const Icon(
+                                              Icons.more_vert,
+                                              size: 16,
+                                              color: AppColors.textHint,
+                                            ),
                                           ],
                                         ),
                                         const SizedBox(height: 2),
                                         Text(
                                           'Oct ${file.uploadDate.day}, 2023',
-                                          style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            color: AppColors.textSecondary,
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -368,22 +466,38 @@ class _DiagnosticFilesScreenState extends State<DiagnosticFilesScreen> {
                               Row(
                                 children: [
                                   IconButton(
-                                    icon: const Icon(Icons.zoom_out, size: 20, color: AppColors.textSecondary),
+                                    icon: const Icon(
+                                      Icons.zoom_out,
+                                      size: 20,
+                                      color: AppColors.textSecondary,
+                                    ),
                                     tooltip: 'Reducir zoom',
                                     onPressed: _zoomOut,
                                   ),
                                   IconButton(
-                                    icon: const Icon(Icons.zoom_in, size: 20, color: AppColors.textSecondary),
+                                    icon: const Icon(
+                                      Icons.zoom_in,
+                                      size: 20,
+                                      color: AppColors.textSecondary,
+                                    ),
                                     tooltip: 'Aumentar zoom',
                                     onPressed: _zoomIn,
                                   ),
                                   IconButton(
-                                    icon: const Icon(Icons.restart_alt, size: 20, color: AppColors.textSecondary),
+                                    icon: const Icon(
+                                      Icons.restart_alt,
+                                      size: 20,
+                                      color: AppColors.textSecondary,
+                                    ),
                                     tooltip: 'Restablecer escala (100%)',
                                     onPressed: _resetZoom,
                                   ),
                                   IconButton(
-                                    icon: const Icon(Icons.open_in_new, size: 18, color: AppColors.textSecondary),
+                                    icon: const Icon(
+                                      Icons.open_in_new,
+                                      size: 18,
+                                      color: AppColors.textSecondary,
+                                    ),
                                     tooltip: 'Abrir en visor completo',
                                     onPressed: () {},
                                   ),
@@ -406,13 +520,16 @@ class _DiagnosticFilesScreenState extends State<DiagnosticFilesScreen> {
                                   // Pan & Zoom interactive container
                                   Positioned.fill(
                                     child: InteractiveViewer(
-                                      transformationController: _transformationController,
+                                      transformationController:
+                                          _transformationController,
                                       clipBehavior: Clip.hardEdge,
                                       minScale: 0.6,
                                       maxScale: 2.8,
                                       boundaryMargin: const EdgeInsets.all(160),
                                       onInteractionUpdate: (details) {
-                                        final scale = _transformationController.value.getMaxScaleOnAxis();
+                                        final scale = _transformationController
+                                            .value
+                                            .getMaxScaleOnAxis();
                                         if ((scale - _zoomLevel).abs() > 0.05) {
                                           setState(() => _zoomLevel = scale);
                                         }
@@ -424,28 +541,57 @@ class _DiagnosticFilesScreenState extends State<DiagnosticFilesScreen> {
                                           padding: const EdgeInsets.all(20),
                                           decoration: BoxDecoration(
                                             color: AppColors.white,
-                                            borderRadius: BorderRadius.circular(4),
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
                                             boxShadow: const [
-                                              BoxShadow(color: Colors.black45, blurRadius: 14, offset: Offset(0, 6)),
+                                              BoxShadow(
+                                                color: Colors.black45,
+                                                blurRadius: 14,
+                                                offset: Offset(0, 6),
+                                              ),
                                             ],
                                           ),
                                           child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
                                               // Header
                                               Row(
                                                 children: [
                                                   Container(
-                                                    padding: const EdgeInsets.all(4),
-                                                    color: AppColors.primaryBlue,
-                                                    child: const Icon(Icons.local_hospital, size: 14, color: AppColors.white),
+                                                    padding:
+                                                        const EdgeInsets.all(4),
+                                                    color:
+                                                        AppColors.primaryBlue,
+                                                    child: const Icon(
+                                                      Icons.local_hospital,
+                                                      size: 14,
+                                                      color: AppColors.white,
+                                                    ),
                                                   ),
                                                   const SizedBox(width: 8),
                                                   Column(
-                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
                                                     children: [
-                                                      const Text('HOSPITAL GENERAL CLÍNICO • LABORATORIO CENTRAL', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w700)),
-                                                      Text('PACIENTE: ${patientName.toUpperCase()} • $patientCode', style: const TextStyle(fontSize: 7, color: AppColors.textSecondary)),
+                                                      const Text(
+                                                        'HOSPITAL GENERAL CLÍNICO • LABORATORIO CENTRAL',
+                                                        style: TextStyle(
+                                                          fontSize: 8,
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                        ),
+                                                      ),
+                                                      Text(
+                                                        'PACIENTE: ${patientName.toUpperCase()} • $patientCode',
+                                                        style: const TextStyle(
+                                                          fontSize: 7,
+                                                          color: AppColors
+                                                              .textSecondary,
+                                                        ),
+                                                      ),
                                                     ],
                                                   ),
                                                 ],
@@ -453,19 +599,67 @@ class _DiagnosticFilesScreenState extends State<DiagnosticFilesScreen> {
                                               const SizedBox(height: 10),
                                               const Divider(height: 1),
                                               const SizedBox(height: 8),
-                                              const Text('PANEL METABÓLICO COMPLETO (SANGRE)', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700)),
+                                              const Text(
+                                                'PANEL METABÓLICO COMPLETO (SANGRE)',
+                                                style: TextStyle(
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
                                               const SizedBox(height: 8),
-                                              _docRow('GLUCOSA', '98 mg/dL', '70 - 99', 'NORMAL'),
-                                              _docRow('NITRÓGENO UREICO (BUN)', '14 mg/dL', '7 - 20', 'NORMAL'),
-                                              _docRow('CREATININA', '0.9 mg/dL', '0.6 - 1.2', 'NORMAL'),
-                                              _docRow('SODIO', '139 mmol/L', '135 - 145', 'NORMAL'),
-                                              _docRow('POTASIO', '4.2 mmol/L', '3.5 - 5.0', 'NORMAL'),
-                                              _docRow('CLORURO', '101 mmol/L', '96 - 106', 'NORMAL'),
-                                              _docRow('CALCIO SÉRICO', '9.4 mg/dL', '8.5 - 10.2', 'NORMAL'),
+                                              _docRow(
+                                                'GLUCOSA',
+                                                '98 mg/dL',
+                                                '70 - 99',
+                                                'NORMAL',
+                                              ),
+                                              _docRow(
+                                                'NITRÓGENO UREICO (BUN)',
+                                                '14 mg/dL',
+                                                '7 - 20',
+                                                'NORMAL',
+                                              ),
+                                              _docRow(
+                                                'CREATININA',
+                                                '0.9 mg/dL',
+                                                '0.6 - 1.2',
+                                                'NORMAL',
+                                              ),
+                                              _docRow(
+                                                'SODIO',
+                                                '139 mmol/L',
+                                                '135 - 145',
+                                                'NORMAL',
+                                              ),
+                                              _docRow(
+                                                'POTASIO',
+                                                '4.2 mmol/L',
+                                                '3.5 - 5.0',
+                                                'NORMAL',
+                                              ),
+                                              _docRow(
+                                                'CLORURO',
+                                                '101 mmol/L',
+                                                '96 - 106',
+                                                'NORMAL',
+                                              ),
+                                              _docRow(
+                                                'CALCIO SÉRICO',
+                                                '9.4 mg/dL',
+                                                '8.5 - 10.2',
+                                                'NORMAL',
+                                              ),
                                               const Spacer(),
                                               const Align(
-                                                alignment: Alignment.centerRight,
-                                                child: Text('Validado por: Dra. M. Lynch, Patóloga Clínica • Página 1/3', style: TextStyle(fontSize: 7, color: AppColors.textHint)),
+                                                alignment:
+                                                    Alignment.centerRight,
+                                                child: Text(
+                                                  'Validado por: Dra. M. Lynch, Patóloga Clínica • Página 1/3',
+                                                  style: TextStyle(
+                                                    fontSize: 7,
+                                                    color: AppColors.textHint,
+                                                  ),
+                                                ),
                                               ),
                                             ],
                                           ),
@@ -481,64 +675,122 @@ class _DiagnosticFilesScreenState extends State<DiagnosticFilesScreen> {
                                     right: 0,
                                     child: Center(
                                       child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 14,
+                                          vertical: 6,
+                                        ),
                                         decoration: BoxDecoration(
                                           color: const Color(0xDD0F172A),
-                                          borderRadius: BorderRadius.circular(24),
-                                          border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+                                          borderRadius: BorderRadius.circular(
+                                            24,
+                                          ),
+                                          border: Border.all(
+                                            color: Colors.white.withValues(
+                                              alpha: 0.18,
+                                            ),
+                                          ),
                                           boxShadow: const [
-                                            BoxShadow(color: Colors.black54, blurRadius: 10, offset: Offset(0, 4)),
+                                            BoxShadow(
+                                              color: Colors.black54,
+                                              blurRadius: 10,
+                                              offset: Offset(0, 4),
+                                            ),
                                           ],
                                         ),
                                         child: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
                                             IconButton(
-                                              icon: const Icon(Icons.remove_circle_outline, size: 18, color: Colors.white),
+                                              icon: const Icon(
+                                                Icons.remove_circle_outline,
+                                                size: 18,
+                                                color: Colors.white,
+                                              ),
                                               tooltip: 'Reducir zoom',
                                               onPressed: _zoomOut,
-                                              constraints: const BoxConstraints(),
-                                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                                              constraints:
+                                                  const BoxConstraints(),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 4,
+                                                  ),
                                             ),
                                             const SizedBox(width: 4),
                                             InkWell(
                                               onTap: _resetZoom,
-                                              borderRadius: BorderRadius.circular(4),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
                                               child: Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 2,
+                                                    ),
                                                 child: Text(
                                                   '${(_zoomLevel * 100).round()}%',
-                                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white),
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: Colors.white,
+                                                  ),
                                                 ),
                                               ),
                                             ),
                                             const SizedBox(width: 4),
                                             IconButton(
-                                              icon: const Icon(Icons.add_circle_outline, size: 18, color: Colors.white),
+                                              icon: const Icon(
+                                                Icons.add_circle_outline,
+                                                size: 18,
+                                                color: Colors.white,
+                                              ),
                                               tooltip: 'Aumentar zoom',
                                               onPressed: _zoomIn,
-                                              constraints: const BoxConstraints(),
-                                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                                              constraints:
+                                                  const BoxConstraints(),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 4,
+                                                  ),
                                             ),
                                             Container(
                                               height: 16,
                                               width: 1,
-                                              margin: const EdgeInsets.symmetric(horizontal: 10),
+                                              margin:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 10,
+                                                  ),
                                               color: Colors.white24,
                                             ),
                                             IconButton(
-                                              icon: const Icon(Icons.fit_screen, size: 17, color: Colors.white),
+                                              icon: const Icon(
+                                                Icons.fit_screen,
+                                                size: 17,
+                                                color: Colors.white,
+                                              ),
                                               tooltip: 'Ajustar a 100%',
                                               onPressed: _resetZoom,
-                                              constraints: const BoxConstraints(),
-                                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                                              constraints:
+                                                  const BoxConstraints(),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 4,
+                                                  ),
                                             ),
                                             const SizedBox(width: 8),
                                             InkWell(
-                                              onTap: () => setState(() => _currentPage = _currentPage == 3 ? 1 : _currentPage + 1),
+                                              onTap: () => setState(
+                                                () => _currentPage =
+                                                    _currentPage == 3
+                                                    ? 1
+                                                    : _currentPage + 1,
+                                              ),
                                               child: Text(
                                                 'Pág. $_currentPage/3',
-                                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: Colors.white,
+                                                ),
                                               ),
                                             ),
                                           ],
@@ -559,37 +811,74 @@ class _DiagnosticFilesScreenState extends State<DiagnosticFilesScreen> {
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text('Fecha de Subida', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                                  const Text(
+                                    'Fecha de Subida',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
                                   const SizedBox(height: 2),
                                   Text(
                                     selectedFile != null
                                         ? '${selectedFile.uploadDate.day} Oct, ${selectedFile.uploadDate.year} ${selectedFile.uploadDate.hour}:${selectedFile.uploadDate.minute.toString().padLeft(2, '0')}'
                                         : '10 Oct, 2023 14:32',
-                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textPrimary,
+                                    ),
                                   ),
                                 ],
                               ),
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text('Subido Por', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                                  const Text(
+                                    'Subido Por',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    selectedFile?.uploadedBy != null && selectedFile!.uploadedBy.contains('Nurse')
-                                        ? selectedFile.uploadedBy.replaceAll('Nurse', 'Enfra.')
-                                        : (selectedFile?.uploadedBy ?? 'Enfra. Adams'),
-                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                                    selectedFile?.uploadedBy != null &&
+                                            selectedFile!.uploadedBy.contains(
+                                              'Nurse',
+                                            )
+                                        ? selectedFile.uploadedBy.replaceAll(
+                                            'Nurse',
+                                            'Enfra.',
+                                          )
+                                        : (selectedFile?.uploadedBy ??
+                                              'Enfra. Adams'),
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textPrimary,
+                                    ),
                                   ),
                                 ],
                               ),
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text('Categoría', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                                  const Text(
+                                    'Categoría',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
                                   const SizedBox(height: 2),
                                   Text(
                                     selectedFile?.category ?? 'Lab Results',
-                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textPrimary,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -604,10 +893,18 @@ class _DiagnosticFilesScreenState extends State<DiagnosticFilesScreen> {
                                 child: OutlinedButton(
                                   onPressed: () {
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Descargando archivo diagnóstico...')),
+                                      const SnackBar(
+                                        content: Text(
+                                          'Descargando archivo diagnóstico...',
+                                        ),
+                                      ),
                                     );
                                   },
-                                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 14,
+                                    ),
+                                  ),
                                   child: const Text('DESCARGAR'),
                                 ),
                               ),
@@ -617,14 +914,18 @@ class _DiagnosticFilesScreenState extends State<DiagnosticFilesScreen> {
                                   onPressed: () {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(
-                                        content: Text('Archivo adjuntado a la nota médica actual.'),
+                                        content: Text(
+                                          'Archivo adjuntado a la nota médica actual.',
+                                        ),
                                         backgroundColor: AppColors.success,
                                       ),
                                     );
                                   },
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppColors.primaryBlue,
-                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 14,
+                                    ),
                                   ),
                                   child: const Text('ADJUNTAR A NOTA'),
                                 ),
@@ -650,10 +951,23 @@ class _DiagnosticFilesScreenState extends State<DiagnosticFilesScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(test, style: const TextStyle(fontSize: 7, fontWeight: FontWeight.w600)),
+          Text(
+            test,
+            style: const TextStyle(fontSize: 7, fontWeight: FontWeight.w600),
+          ),
           Text(result, style: const TextStyle(fontSize: 7)),
-          Text(ref, style: const TextStyle(fontSize: 7, color: AppColors.textHint)),
-          Text(flag, style: const TextStyle(fontSize: 7, color: AppColors.success, fontWeight: FontWeight.w700)),
+          Text(
+            ref,
+            style: const TextStyle(fontSize: 7, color: AppColors.textHint),
+          ),
+          Text(
+            flag,
+            style: const TextStyle(
+              fontSize: 7,
+              color: AppColors.success,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         ],
       ),
     );

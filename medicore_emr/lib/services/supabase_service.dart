@@ -1473,6 +1473,39 @@ class SupabaseService {
     }
   }
 
+  Future<bool> updatePediatricGrowthRecord({
+    required int recordId,
+    required DateTime date,
+    required String ageLabel,
+    required double ageMonths,
+    required double weightKg,
+    required double heightCm,
+    required double headCircumferenceCm,
+    int weightPercentile = 50,
+    int heightPercentile = 50,
+    String? notes,
+  }) async {
+    try {
+      final dateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+      await _client.from('pediatric_growth_records').update({
+        'measurement_date': dateStr,
+        'age_label': ageLabel,
+        'age_months': ageMonths,
+        'weight_kg': weightKg,
+        'height_cm': heightCm,
+        'head_circumference_cm': headCircumferenceCm,
+        'weight_percentile': weightPercentile,
+        'height_percentile': heightPercentile,
+        'notes': notes,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', recordId);
+      return true;
+    } catch (e) {
+      debugPrint('Error actualizando control pediátrico: $e');
+      return false;
+    }
+  }
+
   Future<bool> deletePediatricGrowthRecord(int recordId) async {
     try {
       await _client.from('pediatric_growth_records').delete().eq('id', recordId);
