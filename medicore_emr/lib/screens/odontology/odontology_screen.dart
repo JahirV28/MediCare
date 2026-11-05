@@ -253,9 +253,25 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
                                               Row(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [18, 17, 16, 15, 14, 13, 12, 11].map((tNum) {
-                                                  final state = teeth[tNum] ?? DentalToothState(toothNumber: tNum);
-                                                  return _buildToothWidget(state, provider.selectedTooth == tNum, () => _onToothSelected(tNum, provider));
-                                                }).toList(),
+                                                   final isSel = provider.selectedTooth == tNum;
+                                                   final state = isSel
+                                                       ? DentalToothState(
+                                                           toothNumber: tNum,
+                                                           condition: provider.currentResolvedCondition,
+                                                           affectedSurfaces: provider.selectedSurfaces.toList(),
+                                                           activeProcedure: _procedureController.text,
+                                                         )
+                                                       : (teeth[tNum] ?? DentalToothState(toothNumber: tNum));
+                                                   return _buildToothWidget(
+                                                     state,
+                                                     isSel,
+                                                     () => _onToothSelected(tNum, provider),
+                                                     onSurfaceTapped: (surf) {
+                                                       if (!isSel) _onToothSelected(tNum, provider);
+                                                       provider.toggleSurface(surf);
+                                                     },
+                                                   );
+                                                 }).toList(),
                                               ),
                                             ],
                                           ),
@@ -286,9 +302,25 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
                                               Row(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [21, 22, 23, 24, 25, 26, 27, 28].map((tNum) {
-                                                  final state = teeth[tNum] ?? DentalToothState(toothNumber: tNum);
-                                                  return _buildToothWidget(state, provider.selectedTooth == tNum, () => _onToothSelected(tNum, provider));
-                                                }).toList(),
+                                                   final isSel = provider.selectedTooth == tNum;
+                                                   final state = isSel
+                                                       ? DentalToothState(
+                                                           toothNumber: tNum,
+                                                           condition: provider.currentResolvedCondition,
+                                                           affectedSurfaces: provider.selectedSurfaces.toList(),
+                                                           activeProcedure: _procedureController.text,
+                                                         )
+                                                       : (teeth[tNum] ?? DentalToothState(toothNumber: tNum));
+                                                   return _buildToothWidget(
+                                                     state,
+                                                     isSel,
+                                                     () => _onToothSelected(tNum, provider),
+                                                     onSurfaceTapped: (surf) {
+                                                       if (!isSel) _onToothSelected(tNum, provider);
+                                                       provider.toggleSurface(surf);
+                                                     },
+                                                   );
+                                                 }).toList(),
                                               ),
                                             ],
                                           ),
@@ -310,9 +342,25 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
                                               Row(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [48, 47, 46, 45, 44, 43, 42, 41].map((tNum) {
-                                                  final state = teeth[tNum] ?? DentalToothState(toothNumber: tNum);
-                                                  return _buildToothWidget(state, provider.selectedTooth == tNum, () => _onToothSelected(tNum, provider));
-                                                }).toList(),
+                                                   final isSel = provider.selectedTooth == tNum;
+                                                   final state = isSel
+                                                       ? DentalToothState(
+                                                           toothNumber: tNum,
+                                                           condition: provider.currentResolvedCondition,
+                                                           affectedSurfaces: provider.selectedSurfaces.toList(),
+                                                           activeProcedure: _procedureController.text,
+                                                         )
+                                                       : (teeth[tNum] ?? DentalToothState(toothNumber: tNum));
+                                                   return _buildToothWidget(
+                                                     state,
+                                                     isSel,
+                                                     () => _onToothSelected(tNum, provider),
+                                                     onSurfaceTapped: (surf) {
+                                                       if (!isSel) _onToothSelected(tNum, provider);
+                                                       provider.toggleSurface(surf);
+                                                     },
+                                                   );
+                                                 }).toList(),
                                               ),
                                               const SizedBox(height: 6),
                                               Container(
@@ -343,9 +391,25 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
                                               Row(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [31, 32, 33, 34, 35, 36, 37, 38].map((tNum) {
-                                                  final state = teeth[tNum] ?? DentalToothState(toothNumber: tNum);
-                                                  return _buildToothWidget(state, provider.selectedTooth == tNum, () => _onToothSelected(tNum, provider));
-                                                }).toList(),
+                                                   final isSel = provider.selectedTooth == tNum;
+                                                   final state = isSel
+                                                       ? DentalToothState(
+                                                           toothNumber: tNum,
+                                                           condition: provider.currentResolvedCondition,
+                                                           affectedSurfaces: provider.selectedSurfaces.toList(),
+                                                           activeProcedure: _procedureController.text,
+                                                         )
+                                                       : (teeth[tNum] ?? DentalToothState(toothNumber: tNum));
+                                                   return _buildToothWidget(
+                                                     state,
+                                                     isSel,
+                                                     () => _onToothSelected(tNum, provider),
+                                                     onSurfaceTapped: (surf) {
+                                                       if (!isSel) _onToothSelected(tNum, provider);
+                                                       provider.toggleSurface(surf);
+                                                     },
+                                                   );
+                                                 }).toList(),
                                               ),
                                               const SizedBox(height: 6),
                                               Container(
@@ -866,32 +930,53 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
     OdontologyProvider provider,
     Patient? activePatient,
   ) {
+    final tNum = provider.selectedTooth;
+    final isUpper = _upperTeeth.contains(tNum);
+    final isRightSideOfPatient = (tNum >= 11 && tNum <= 18) || (tNum >= 41 && tNum <= 48);
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.border),
+        boxShadow: const [
+          BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 2)),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Nuevo Hallazgo / Tratamiento',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Nuevo Hallazgo / Tratamiento',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryBlueLight.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  'Pieza FDI $tNum',
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.primaryBlue),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
 
-          // Pieza seleccionada
-          const Text('Pieza Dental Seleccionada', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-          const SizedBox(height: 6),
+          // Tarjeta informativa de la pieza seleccionada
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: AppColors.background,
               borderRadius: BorderRadius.circular(8),
@@ -899,12 +984,21 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.tag, size: 16, color: AppColors.primaryBlue),
+                const Icon(Icons.medical_information_outlined, size: 18, color: AppColors.primaryBlue),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    'Pieza ${provider.selectedTooth} — ${_getToothDescription(provider.selectedTooth)}',
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Pieza $tNum — ${_getToothDescription(tNum)}',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                      ),
+                      Text(
+                        isUpper ? 'Arcada Superior' : 'Mandíbula Inferior',
+                        style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -912,63 +1006,126 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
           ),
           const SizedBox(height: 14),
 
-          // Superficies dentales afectadas (5 caras anatómicas FDI)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Superficie(s) Afectada(s)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-              if (provider.selectedSurfaces.isNotEmpty)
-                InkWell(
-                  onTap: () => provider.clearSelectedSurfaces(),
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                    child: Text('Limpiar / Desmarcar', style: TextStyle(fontSize: 11, color: AppColors.primaryBlue, fontWeight: FontWeight.w600)),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              _surfaceCheck('Mesial (M)', 'M', provider),
-              _surfaceCheck('Oclusal/Incisal (O)', 'O', provider),
-              _surfaceCheck('Distal (D)', 'D', provider),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              _surfaceCheck('Vestibular / Bucal (V/B)', 'B', provider),
-              _surfaceCheck('Lingual / Palatino (L/P)', 'L', provider),
-              const Expanded(child: SizedBox()),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          // Menú desplegable de Condición
-          const Text('Condición / Diagnóstico Clínico', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-          const SizedBox(height: 6),
-          DropdownButtonFormField<String>(
-            key: ValueKey('${provider.selectedTooth}_${provider.selectedCondition}'),
-            initialValue: _conditionsList.contains(provider.selectedCondition)
-                ? provider.selectedCondition
-                : _conditionsList.first,
-            isExpanded: true,
-            decoration: InputDecoration(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          // ─── VISOR INTERACTIVO DE CORONA FDI (Toque directo en caras) ───
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.border),
             ),
-            items: _conditionsList.map((cond) => DropdownMenuItem(value: cond, child: Text(cond, style: const TextStyle(fontSize: 12)))).toList(),
-            onChanged: (v) {
-              if (v != null) provider.setCondition(v);
-            },
+            child: Column(
+              children: [
+                const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.touch_app, size: 14, color: AppColors.primaryBlue),
+                    SizedBox(width: 6),
+                    Text(
+                      'Haga clic directamente en las caras del diente',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                LargeToothCrownInspector(
+                  state: DentalToothState(
+                    toothNumber: tNum,
+                    condition: provider.currentResolvedCondition,
+                    affectedSurfaces: provider.selectedSurfaces.toList(),
+                    activeProcedure: _procedureController.text,
+                  ),
+                  isUpper: isUpper,
+                  onSurfaceTapped: (surf) => provider.toggleSurface(surf),
+                ),
+                const SizedBox(height: 10),
+                // Botones rápidos de selección
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    TextButton.icon(
+                      icon: const Icon(Icons.select_all, size: 14),
+                      label: const Text('Marcar 5 Caras', style: TextStyle(fontSize: 11)),
+                      onPressed: () => provider.selectAllSurfaces(),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton.icon(
+                      icon: const Icon(Icons.clear_all, size: 14),
+                      label: const Text('Desmarcar Caras', style: TextStyle(fontSize: 11)),
+                      onPressed: () => provider.clearSelectedSurfaces(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                // Chips de superficies anatómicas
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    _surfaceChip('Oclusal (O)', 'O', provider),
+                    _surfaceChip(isUpper ? 'Vestibular (V)' : 'Bucal (B)', 'B', provider),
+                    _surfaceChip(isUpper ? 'Palatino (P)' : 'Lingual (L)', 'L', provider),
+                    _surfaceChip(isRightSideOfPatient ? 'Distal (D)' : 'Mesial (M)', 'M', provider),
+                    _surfaceChip(isRightSideOfPatient ? 'Mesial (M)' : 'Distal (D)', 'D', provider),
+                  ],
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 14),
 
-          // Nombre del Procedimiento
-          const Text('Procedimiento Odontológico', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+          // ─── SELECTOR DIRECTO DE CONDICIÓN CLÍNICA (4 Tarjetas Rápidas) ───
+          const Text('Diagnóstico / Condición Clínica', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _buildConditionCard(
+                label: 'Caries Activa',
+                subtitle: 'Rojo',
+                color: const Color(0xFFEF4444),
+                icon: Icons.coronavirus_outlined,
+                isSelected: provider.currentResolvedCondition == ToothCondition.caries,
+                onTap: () => provider.setCondition('Caries Activa / Esmalte'),
+              ),
+              const SizedBox(width: 8),
+              _buildConditionCard(
+                label: 'Tratado / Obturado',
+                subtitle: 'Azul',
+                color: const Color(0xFF2563EB),
+                icon: Icons.healing,
+                isSelected: provider.currentResolvedCondition == ToothCondition.treated,
+                onTap: () => provider.setCondition('Tratado / Restaurado'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _buildConditionCard(
+                label: 'Ausente / Extraído',
+                subtitle: 'Cruz "X"',
+                color: const Color(0xFF64748B),
+                icon: Icons.cancel_outlined,
+                isSelected: provider.currentResolvedCondition == ToothCondition.missing,
+                onTap: () => provider.setCondition('Ausente / Extracción Previa'),
+              ),
+              const SizedBox(width: 8),
+              _buildConditionCard(
+                label: 'Sano / Sin Patología',
+                subtitle: 'Limpio',
+                color: const Color(0xFF10B981),
+                icon: Icons.check_circle_outline,
+                isSelected: provider.currentResolvedCondition == ToothCondition.healthy && provider.selectedSurfaces.isEmpty,
+                onTap: () => provider.clearSelectedSurfaces(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Procedimiento Odontológico
+          const Text('Procedimiento Odontológico', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
           const SizedBox(height: 6),
-          // Sugerencias rápidas de procedimientos
           DropdownButtonFormField<String>(
             hint: const Text('Elegir de catálogo...', style: TextStyle(fontSize: 12)),
             isExpanded: true,
@@ -980,6 +1137,16 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
             onChanged: (val) {
               if (val != null && val != 'Personalizado...') {
                 _procedureController.text = val;
+                final valLower = val.toLowerCase();
+                if (valLower.contains('obtur') ||
+                    valLower.contains('resina') ||
+                    valLower.contains('amalgama') ||
+                    valLower.contains('corona') ||
+                    valLower.contains('incrusta') ||
+                    valLower.contains('endodoncia') ||
+                    valLower.contains('reconstruc')) {
+                  provider.setCondition('Tratado / Restaurado');
+                }
               }
             },
           ),
@@ -994,7 +1161,7 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
           ),
           const SizedBox(height: 14),
 
-          // Fila Costo y Anestesia
+          // Fila Costo y Estado
           Row(
             children: [
               Expanded(
@@ -1084,13 +1251,22 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
                   onPressed: () {
                     _notesController.clear();
                     _costController.clear();
+                    provider.clearSelectedSurfaces();
                   },
                   child: const Text('Limpiar'),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: ElevatedButton(
+                flex: 2,
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.save_outlined, size: 18),
+                  label: const Text('Guardar Hallazgo'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    backgroundColor: AppColors.primaryBlue,
+                    foregroundColor: Colors.white,
+                  ),
                   onPressed: () async {
                     if (activePatient == null || activePatient.id == null) {
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -1103,35 +1279,15 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
                       return;
                     }
 
-                    ToothCondition cond;
-                    final condLower = provider.selectedCondition.toLowerCase();
-                    if (condLower.contains('caries')) {
-                      cond = ToothCondition.caries;
-                    } else if (condLower.contains('trata') ||
-                        condLower.contains('restor') ||
-                        condLower.contains('obtur') ||
-                        condLower.contains('corona') ||
-                        condLower.contains('conducto') ||
-                        condLower.contains('endodoncia') ||
-                        condLower.contains('incrusta')) {
-                      cond = ToothCondition.treated;
-                    } else if (condLower.contains('ausen') || condLower.contains('extrac') || condLower.contains('perdid')) {
-                      cond = ToothCondition.missing;
-                    } else {
-                      cond = ToothCondition.healthy;
-                    }
-
-                    // Si no se marcó ninguna superficie y no es pieza ausente, se normaliza a sana
-                    if (provider.selectedSurfaces.isEmpty && cond != ToothCondition.missing) {
-                      cond = ToothCondition.healthy;
-                    }
+                    final cond = provider.currentResolvedCondition;
+                    final procName = _procedureController.text.trim().isNotEmpty
+                        ? _procedureController.text.trim()
+                        : 'Evaluación y Diagnóstico';
 
                     final success = await provider.addFinding(
                       toothNumber: provider.selectedTooth,
                       condition: cond,
-                      procedureName: _procedureController.text.trim().isNotEmpty
-                          ? _procedureController.text.trim()
-                          : 'Evaluación y Diagnóstico',
+                      procedureName: procName,
                       notes: _notesController.text.trim().isNotEmpty ? _notesController.text.trim() : null,
                       cost: double.tryParse(_costController.text.trim()),
                       anesthesia: _selectedAnesthesia,
@@ -1143,19 +1299,22 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
                     _costController.clear();
 
                     if (context.mounted) {
+                      final condLabel = cond == ToothCondition.caries
+                          ? 'Caries Activa'
+                          : (cond == ToothCondition.treated
+                              ? 'Tratado'
+                              : (cond == ToothCondition.missing ? 'Ausente' : 'Sano'));
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(success
-                              ? 'Hallazgo y procedimiento guardado en Supabase con éxito.'
-                              : 'Hallazgo registrado.'),
-                          backgroundColor: success ? AppColors.success : AppColors.warning,
+                              ? 'Pieza ${provider.selectedTooth} guardada exitosamente ($condLabel).'
+                              : 'Error al sincronizar con el servidor.'),
+                          backgroundColor: success ? const Color(0xFF10B981) : AppColors.danger,
                           behavior: SnackBarBehavior.floating,
                         ),
                       );
                     }
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryBlue),
-                  child: const Text('Guardar Hallazgo'),
                 ),
               ),
             ],
@@ -1164,10 +1323,6 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
       ),
     );
   }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // CARD DE ÍNDICE CPOD
-  // ══════════════════════════════════════════════════════════════════════════
 
   Widget _buildDmftCard(DmftSummary dmft) {
     return Container(
@@ -1985,7 +2140,12 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
     );
   }
 
-  Widget _buildToothWidget(DentalToothState state, bool isSelected, VoidCallback onTap) {
+  Widget _buildToothWidget(
+    DentalToothState state,
+    bool isSelected,
+    VoidCallback onTap, {
+    Function(String surface)? onSurfaceTapped,
+  }) {
     final tNum = state.toothNumber;
     final isUpper = _upperTeeth.contains(tNum);
 
@@ -1997,21 +2157,21 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
     final surfStr = state.affectedSurfaces.isNotEmpty ? ' (${state.affectedSurfaces.join(",")})' : '';
     final procStr = state.activeProcedure != null && state.activeProcedure!.isNotEmpty ? '\n${state.activeProcedure}' : '';
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(6),
-      child: Tooltip(
-        message: 'Pieza $tNum: ${_getToothDescription(tNum)}\nEstado: $condLabel$surfStr$procStr',
-        child: Container(
-          width: 36,
-          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-          decoration: BoxDecoration(
-            color: isSelected ? AppColors.primaryBlueLight.withValues(alpha: 0.18) : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
-            border: isSelected
-                ? Border.all(color: AppColors.primaryBlue, width: 2)
-                : Border.all(color: Colors.transparent, width: 2),
-          ),
+    return Tooltip(
+      message: 'Pieza $tNum: ${_getToothDescription(tNum)}\nEstado: $condLabel$surfStr$procStr\n(Toque para seleccionar o marcar cara)',
+      child: Container(
+        width: 36,
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primaryBlueLight.withValues(alpha: 0.18) : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+          border: isSelected
+              ? Border.all(color: AppColors.primaryBlue, width: 2)
+              : Border.all(color: Colors.transparent, width: 2),
+        ),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(4),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -2023,10 +2183,40 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
                   color: isSelected ? AppColors.primaryBlue : AppColors.textPrimary,
                 ),
               ),
-              const SizedBox(height: 4),
-              CustomPaint(
-                size: const Size(28, 28),
-                painter: ToothPainter(state: state, isUpper: isUpper),
+              const SizedBox(height: 3),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: (details) {
+                  onTap();
+                  if (onSurfaceTapped != null) {
+                    final pos = details.localPosition;
+                    const w = 28.0;
+                    const h = 28.0;
+                    final isRightSideOfPatient = (tNum >= 11 && tNum <= 18) || (tNum >= 41 && tNum <= 48);
+                    final topSurface = isUpper ? 'B' : 'L';
+                    final bottomSurface = isUpper ? 'L' : 'B';
+                    final leftSurface = isRightSideOfPatient ? 'D' : 'M';
+                    final rightSurface = isRightSideOfPatient ? 'M' : 'D';
+
+                    String surf = 'O';
+                    if (pos.dx >= w * 0.28 && pos.dx <= w * 0.72 && pos.dy >= h * 0.28 && pos.dy <= h * 0.72) {
+                      surf = 'O';
+                    } else if (pos.dy < h * 0.28) {
+                      surf = topSurface;
+                    } else if (pos.dy > h * 0.72) {
+                      surf = bottomSurface;
+                    } else if (pos.dx < w * 0.28) {
+                      surf = leftSurface;
+                    } else {
+                      surf = rightSurface;
+                    }
+                    onSurfaceTapped(surf);
+                  }
+                },
+                child: CustomPaint(
+                  size: const Size(28, 28),
+                  painter: ToothPainter(state: state, isUpper: isUpper),
+                ),
               ),
               const SizedBox(height: 3),
               Container(
@@ -2048,23 +2238,85 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
     );
   }
 
-  Widget _surfaceCheck(String label, String code, OdontologyProvider provider) {
-    final isChecked = provider.selectedSurfaces.contains(code);
+  Widget _buildConditionCard({
+    required String label,
+    required String subtitle,
+    required Color color,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
     return Expanded(
       child: InkWell(
-        onTap: () => provider.toggleSurface(code),
-        child: Row(
-          children: [
-            Checkbox(
-              value: isChecked,
-              onChanged: (_) => provider.toggleSurface(code),
-              activeColor: AppColors.primaryBlue,
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? color.withValues(alpha: 0.12) : AppColors.background,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isSelected ? color : AppColors.border,
+              width: isSelected ? 2 : 1,
             ),
-            Flexible(child: Text(label, style: const TextStyle(fontSize: 11))),
-          ],
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 16, color: isSelected ? color : AppColors.textSecondary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                        color: isSelected ? color : AppColors.textPrimary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: isSelected ? color.withValues(alpha: 0.8) : AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
+    );
+  }
+
+  Widget _surfaceChip(String label, String code, OdontologyProvider provider) {
+    final isChecked = provider.selectedSurfaces.contains(code);
+    final condColor = provider.currentResolvedCondition == ToothCondition.treated
+        ? AppColors.primaryBlue
+        : (provider.currentResolvedCondition == ToothCondition.caries ? AppColors.danger : AppColors.primaryBlue);
+    return FilterChip(
+      label: Text(label, style: TextStyle(
+        fontSize: 11,
+        fontWeight: isChecked ? FontWeight.w700 : FontWeight.w500,
+        color: isChecked ? Colors.white : AppColors.textPrimary,
+      )),
+      selected: isChecked,
+      selectedColor: condColor,
+      checkmarkColor: Colors.white,
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(6),
+        side: BorderSide(color: isChecked ? condColor : AppColors.border),
+      ),
+      onSelected: (_) => provider.toggleSurface(code),
     );
   }
 
@@ -2136,12 +2388,83 @@ class _OdontologyScreenState extends State<OdontologyScreen> {
   }
 }
 
+/// Widget para inspeccionar y marcar interactivamente la corona de la pieza seleccionada (FDI)
+class LargeToothCrownInspector extends StatelessWidget {
+  final DentalToothState state;
+  final bool isUpper;
+  final Function(String surface) onSurfaceTapped;
+
+  const LargeToothCrownInspector({
+    super.key,
+    required this.state,
+    required this.isUpper,
+    required this.onSurfaceTapped,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tNum = state.toothNumber;
+    final isRightSideOfPatient = (tNum >= 11 && tNum <= 18) || (tNum >= 41 && tNum <= 48);
+    final topSurface = isUpper ? 'B' : 'L';
+    final bottomSurface = isUpper ? 'L' : 'B';
+    final leftSurface = isRightSideOfPatient ? 'D' : 'M';
+    final rightSurface = isRightSideOfPatient ? 'M' : 'D';
+
+    const double crownSize = 100.0;
+
+    return Center(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (details) {
+          final pos = details.localPosition;
+          const w = crownSize;
+          const h = crownSize;
+          String surf = 'O';
+          if (pos.dx >= w * 0.28 && pos.dx <= w * 0.72 && pos.dy >= h * 0.28 && pos.dy <= h * 0.72) {
+            surf = 'O';
+          } else if (pos.dy < h * 0.28) {
+            surf = topSurface;
+          } else if (pos.dy > h * 0.72) {
+            surf = bottomSurface;
+          } else if (pos.dx < w * 0.28) {
+            surf = leftSurface;
+          } else {
+            surf = rightSurface;
+          }
+          onSurfaceTapped(surf);
+        },
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: const [
+              BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 2)),
+            ],
+          ),
+          child: CustomPaint(
+            size: const Size(crownSize, crownSize),
+            painter: ToothPainter(
+              state: state,
+              isUpper: isUpper,
+              showLabels: true,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// CustomPainter para renderizar las 5 superficies anatómicas de cada pieza dental FDI
 class ToothPainter extends CustomPainter {
   final DentalToothState state;
   final bool isUpper;
+  final bool showLabels;
 
-  ToothPainter({required this.state, required this.isUpper});
+  ToothPainter({
+    required this.state,
+    required this.isUpper,
+    this.showLabels = false,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -2265,10 +2588,35 @@ class ToothPainter extends CustomPainter {
 
     // Borde exterior
     canvas.drawRRect(rrect, borderPaint);
+
+    // Etiquetas anatómicas para visor ampliado
+    if (showLabels) {
+      final textPaint = TextPainter(textDirection: TextDirection.ltr);
+
+      void drawLabel(String text, double cx, double cy, Color surfaceBg) {
+        final isDark = surfaceBg == const Color(0xFFEF4444) || surfaceBg == const Color(0xFF2563EB);
+        textPaint.text = TextSpan(
+          text: text,
+          style: TextStyle(
+            fontSize: w > 70 ? 13 : 9,
+            fontWeight: FontWeight.w800,
+            color: isDark ? Colors.white : const Color(0xFF475569),
+          ),
+        );
+        textPaint.layout();
+        textPaint.paint(canvas, Offset(cx - textPaint.width / 2, cy - textPaint.height / 2));
+      }
+
+      drawLabel('O', w / 2, h / 2, centerColor);
+      drawLabel(isUpper ? 'V' : 'L', w / 2, h * 0.14, topColor);
+      drawLabel(isUpper ? 'L' : 'V', w / 2, h * 0.86, bottomColor);
+      drawLabel(isRightSideOfPatient ? 'D' : 'M', w * 0.14, h / 2, leftColor);
+      drawLabel(isRightSideOfPatient ? 'M' : 'D', w * 0.86, h / 2, rightColor);
+    }
   }
 
   @override
   bool shouldRepaint(covariant ToothPainter oldDelegate) {
-    return oldDelegate.state != state || oldDelegate.isUpper != isUpper;
+    return true;
   }
 }
